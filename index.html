@@ -1,108 +1,157 @@
 <!DOCTYPE html><html><head>
-<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<title>Rooftop Operations</title>
-<!-- Google Firebase Web SDK -->
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-<style>
-  :root { --bg: #f0f2f5; --card: #ffffff; --water: #0ea5e9; --room: #8b5cf6; --out: #10b981; --text: #1e293b; --muted: #64748b; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px 10px; }
-  .container { max-width: 1000px; margin: 0 auto; }
-  h1 { text-align: center; font-size: 24px; margin-bottom: 20px; font-weight: 700; letter-spacing: -0.5px; }
-  .btn-sync { display: block; width: 100%; max-width: 300px; margin: 0 auto 20px auto; background: #1e293b; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-  .btn-sync:active { background: #0f172a; transform: translateY(1px); }
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>Rooftop Operations</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root { --bg: #f4f7f6; --card: #fff; --primary: #2563eb; --text: #1e293b; --muted: #64748b; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+    .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .lbl { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+    .val { font-size: 28px; font-weight: 700; margin: 5px 0; }
+    .unit { font-size: 14px; color: var(--muted); }
+    
+    /* Details Page */
+    #details-page { display: none; }
+    .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; }
+    .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
+    .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
+    .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .tab.active { background: var(--primary); color: white; }
+  </style></head><body>
   
-  .section-title { font-size: 18px; font-weight: 700; margin: 30px 0 15px 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
-  .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.04); border-top: 4px solid #ccc; }
+  <div class="container" id="dash-page">
+    <div class="header"><h2>🏢 Rooftop Operations</h2></div>
+    
+    <h3 style="color:#0ea5e9;">Water Systems</h3>
+    <div class="grid">
+      <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
+      <div class="card" onclick="openDetails('tank', 'Tank Capacity')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
+      <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
+      <div class="card"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
+      <div class="card" onclick="openDetails('tw', 'Water Temp')"><div class="lbl">Water Temp</div><div class="val"><span id="v-tw">-</span> <span class="unit">&deg;C</span></div></div>
+    </div>
   
-  .card.water { border-color: var(--water); }
-  .card.room { border-color: var(--room); }
-  .card.out { border-color: var(--out); }
+    <h3 style="color:#8b5cf6; margin-top:25px;">Tank Room</h3>
+    <div class="grid">
+      <div class="card" onclick="openDetails('leak', 'Leak Detection')"><div class="lbl">Floor Status</div><div class="val" id="v-leak">-</div></div>
+      <div class="card" onclick="openDetails('light', 'Room Light')"><div class="lbl">Room Lighting</div><div class="val" id="v-rl">-</div></div>
+      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
+    </div>
   
-  .lbl { font-size: 14px; font-weight: 600; color: var(--muted); }
-  .reading { font-size: 28px; font-weight: 700; color: var(--text); margin: 10px 0 0 0; }
-  .unit { font-size: 16px; font-weight: 500; color: var(--muted); }
-  .status-text { font-size: 22px; font-weight: 700; }
-</style></head><body>
-
-<div class="container">
-  <h1>Rooftop Operations</h1>
-  <!-- Top Sync Button -->
-  <button class="btn-sync" onclick="fetchData()">Fetch Latest Data</button>
-
-  <!-- WATER SECTION -->
-  <div class="section-title" style="color: var(--water);">Water Systems</div>
-  <div class="grid">
-    <div class="card water"><div class="lbl">Tank R2 Purity</div><div class="reading"><span id="v-tds1">--</span> <span class="unit">PPM</span></div></div>
-    <div class="card water"><div class="lbl">Tank R3 Purity</div><div class="reading"><span id="v-tds2">--</span> <span class="unit">PPM</span></div></div>
-    <div class="card water"><div class="lbl">Tank R3 Level</div><div class="reading"><span id="v-dist">--</span> <span class="unit">cm</span></div></div>
-    <div class="card water"><div class="lbl">Mainline Intake Flow</div><div class="reading"><span id="v-flow">--</span> <span class="unit">L/min</span></div></div>
-    <div class="card water"><div class="lbl">Tank R3 Temp</div><div class="reading"><span id="v-tw">--</span> <span class="unit">&deg;C</span></div></div>
+    <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
+    <div class="grid">
+      <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
+      <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Rain Intensity</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
+    </div>
   </div>
-
-  <!-- ROOM SECTION -->
-  <div class="section-title" style="color: var(--room);">Tank Room Environment</div>
-  <div class="grid">
-    <div class="card room"><div class="lbl">Leak Detection</div><div class="reading status-text" id="v-leak" style="color: var(--room);">--</div></div>
-    <div class="card room"><div class="lbl">Room Lighting</div><div class="reading status-text" id="v-rl" style="color: var(--room);">--</div></div>
-    <div class="card room"><div class="lbl">Ambient Temp</div><div class="reading"><span id="v-rmt">--</span> <span class="unit">&deg;C</span></div></div>
-    <div class="card room"><div class="lbl">Relative Humidity</div><div class="reading"><span id="v-rmh">--</span> <span class="unit">%</span></div></div>
-    <div class="card room"><div class="lbl">Atmo Pressure</div><div class="reading"><span id="v-rmp">--</span> <span class="unit">hPa</span></div></div>
-  </div>
-
-  <!-- OUTSIDE SECTION -->
-  <div class="section-title" style="color: var(--out);">Outdoor Environment</div>
-  <div class="grid">
-    <div class="card out"><div class="lbl">Outdoor Temp</div><div class="reading"><span id="v-to">--</span> <span class="unit">&deg;C</span></div></div>
-    <div class="card out"><div class="lbl">Rain Intensity</div><div class="reading"><span id="v-rain">--</span> <span class="unit">%</span></div></div>
-    <div class="card out"><div class="lbl">Outdoor Light</div><div class="reading"><span id="v-ol">--</span> <span class="unit">Raw</span></div></div>
-  </div>
-
-  <br>
-  <!-- Bottom Sync Button -->
-  <button class="btn-sync" onclick="fetchData()">Fetch Latest Data</button>
-</div>
-
-<script>
-  // 🔴 PASTE YOUR FIREBASE URL BELOW 🔴
-  const firebaseConfig = {
-    databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/
-"
-  };
   
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  function fetchData() {
-    const buttons = document.querySelectorAll('.btn-sync');
-    buttons.forEach(b => b.innerText = "Syncing...");
-
-    db.ref('rooftop/live').once('value').then((snapshot) => {
-      const data = snapshot.val();
-      if(data) {
-        document.getElementById('v-tds1').innerText = data.tds1;
-        document.getElementById('v-tds2').innerText = data.tds2;
-        document.getElementById('v-dist').innerText = data.dist;
-        document.getElementById('v-flow').innerText = data.flow;
-        document.getElementById('v-tw').innerText = data.tw;
-        document.getElementById('v-to').innerText = data.to;
-        document.getElementById('v-rmt').innerText = data.rmt;
-        document.getElementById('v-rmh').innerText = data.rmh;
-        document.getElementById('v-rmp').innerText = data.rmp;
-        document.getElementById('v-rain').innerText = data.rain;
-        document.getElementById('v-ol').innerText = data.ol;
-        document.getElementById('v-leak').innerText = data.leak;
-        document.getElementById('v-rl').innerText = data.rl;
-      }
-      setTimeout(() => buttons.forEach(b => b.innerText = "Fetch Latest Data"), 500);
-    }).catch(error => {
-      alert("Network Error: Could not reach database.");
-      buttons.forEach(b => b.innerText = "Fetch Latest Data");
+  <!-- DETAILS & ALERTS PAGE -->
+  <div class="container" id="details-page">
+    <div class="header">
+      <button class="btn" onclick="closeDetails()">🔙 Back</button>
+      <h2 id="det-title">Metric Details</h2>
+    </div>
+    
+    <div class="time-tabs">
+      <div class="tab active">24H</div><div class="tab">7D</div><div class="tab">30D</div>
+    </div>
+    
+    <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
+  
+    <div class="alert-box">
+      <h4>🔔 Notification Alerts</h4>
+      <div id="alert-ui"></div>
+      <button class="btn" onclick="saveAlert()" style="margin-top:10px; width:100%;">Save Alert Rules</button>
+    </div>
+  </div>
+  
+  <script>
+    // 🔴 PASTE URL HERE 🔴
+    firebase.initializeApp({ databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/" });
+    const db = firebase.database();
+    let currentMetric = '';
+  
+    // 1. LIVE DATA LISTENER (WebSocket - Updates instantly)
+    db.ref('rooftop/live').on('value', (snap) => {
+      const d = snap.val();
+      if(!d) return;
+      document.getElementById('v-tds1').innerText = d.tds1;
+      document.getElementById('v-tds2').innerText = d.tds2;
+      document.getElementById('v-tank').innerText = d.tank;
+      document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(0);
+      document.getElementById('v-flow').innerText = d.flow;
+      document.getElementById('v-tw').innerText = d.tw;
+      document.getElementById('v-to').innerText = d.to;
+      document.getElementById('v-rmt').innerText = d.rmt;
+      
+      document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
+      document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
+      document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
     });
-  }
   
-  // Auto-fetch immediately when page loads
-  window.onload = fetchData;
-</script>
-</body></html>
+    // 2. UI NAVIGATION & ALERT LOGIC
+    function openDetails(metricId, title) {
+      currentMetric = metricId;
+      document.getElementById('dash-page').style.display = 'none';
+      document.getElementById('details-page').style.display = 'block';
+      document.getElementById('det-title').innerText = title;
+      
+      const ui = document.getElementById('alert-ui');
+      
+      // Custom Alert Logic UI Injector
+      if (metricId === 'leak') {
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Send Telegram if leak detected</label>`;
+      } else if (metricId === 'light') {
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if left on for</label> 
+                        <input type="number" id="a-val" style="width:60px;" placeholder="Hrs"> Hours`;
+      } else if (metricId === 'tds') {
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
+                        <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
+      } else if (metricId === 'vol') {
+        ui.innerHTML = `No alerts available for this metric.`;
+      } else {
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
+                        <div class="alert-row">
+                          <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
+                          <input type="number" id="a-val" placeholder="Threshold">
+                        </div>`;
+      }
+  
+      // Fetch existing rules from Firebase and populate
+      if(metricId !== 'vol') {
+        db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
+          if(s.val()) {
+            document.getElementById('a-active').checked = s.val().active;
+            if(document.getElementById('a-val')) document.getElementById('a-val').value = s.val().val;
+            if(document.getElementById('a-cond')) document.getElementById('a-cond').value = s.val().cond;
+          }
+        });
+      }
+      
+      // (Placeholder for History Chart fetching logic)
+    }
+  
+    function saveAlert() {
+      if(currentMetric === 'vol') return;
+      const rule = { active: document.getElementById('a-active').checked };
+      if(document.getElementById('a-val')) rule.val = parseFloat(document.getElementById('a-val').value);
+      if(document.getElementById('a-cond')) rule.cond = document.getElementById('a-cond').value;
+      
+      db.ref('rooftop/alerts/' + currentMetric).set(rule);
+      alert("Alert Rule Saved to Cloud.");
+    }
+  
+    function closeDetails() {
+      document.getElementById('details-page').style.display = 'none';
+      document.getElementById('dash-page').style.display = 'block';
+    }
+  </script>
+  </body></html>
