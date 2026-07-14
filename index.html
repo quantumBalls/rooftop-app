@@ -1,167 +1,171 @@
 <!DOCTYPE html><html><head>
-  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-  <title>Rooftop Operations</title>
-  <!-- PWA & Apple iOS Tags -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Tank Room">
-  <link rel="apple-touch-icon" href="icon.png">
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Rooftop Operations</title>
+<!-- PWA & Apple iOS Tags -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tank Room">
+<link rel="apple-touch-icon" href="icon.png">
 
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    :root { --bg: #f4f7f6; --card: #fff; --primary: #2563eb; --text: #1e293b; --muted: #64748b; }
-    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
-    .container { max-width: 900px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
-    .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; }
-    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .lbl { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
-    .val { font-size: 28px; font-weight: 700; margin: 5px 0; }
-    .unit { font-size: 14px; color: var(--muted); }
-    
-    /* Details Page */
-    #details-page { display: none; }
-    .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; }
-    .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-    input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
-    .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
-    .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
-    .tab.active { background: var(--primary); color: white; }
-  </style></head><body>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root { --bg: #f4f7f6; --card: #fff; --primary: #2563eb; --text: #1e293b; --muted: #64748b; }
+  body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+  .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+  .lbl { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+  .val { font-size: 28px; font-weight: 700; margin: 5px 0; }
+  .unit { font-size: 14px; color: var(--muted); }
   
-  <div class="container" id="dash-page">
-    <div class="header"><h2>🏢 Rooftop Operations</h2></div>
-    
-    <h3 style="color:#0ea5e9;">Water Systems</h3>
-    <div class="grid">
-      <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
-      <div class="card" onclick="openDetails('tank', 'Tank Capacity')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
-      <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
-      <div class="card"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
-      <div class="card" onclick="openDetails('tw', 'Water Temp')"><div class="lbl">Water Temp</div><div class="val"><span id="v-tw">-</span> <span class="unit">&deg;C</span></div></div>
-    </div>
+  /* Details Page */
+  #details-page { display: none; }
+  .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; }
+  .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
+  .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
+  .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .tab.active { background: var(--primary); color: white; }
+</style></head><body>
+
+<div class="container" id="dash-page">
+  <div class="header"><h2>🏢 Rooftop Operations</h2></div>
   
-    <h3 style="color:#8b5cf6; margin-top:25px;">Tank Room</h3>
-    <div class="grid">
-      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
-      <div class="card" onclick="openDetails('rmh', 'Relative Humidity')"><div class="lbl">Room Humidity</div><div class="val"><span id="v-rmh">-</span> <span class="unit">%</span></div></div>
-      <div class="card" onclick="openDetails('leak', 'Leak Detection')"><div class="lbl">Floor Status</div><div class="val" id="v-leak">-</div></div>
-      <div class="card" onclick="openDetails('light', 'Room Light')"><div class="lbl">Room Lighting</div><div class="val" id="v-rl">-</div></div>
-    </div>
-  
-    <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
-    <div class="grid">
-      <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
-      <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Rain Intensity</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
-      <div class="card" onclick="openDetails('rmp', 'Atmo Pressure')"><div class="lbl">Outdoor Pressure</div><div class="val"><span id="v-rmp">-</span> <span class="unit">hPa</span></div></div>
-    </div>
+  <h3 style="color:#0ea5e9;">Water Systems</h3>
+  <div class="grid">
+    <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
+    <div class="card" onclick="openDetails('tank', 'Tank Capacity')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
+    <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
+    <div class="card" onclick="openDetails('flow', 'Pump Automation Threshold')"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
+    <div class="card" onclick="openDetails('tw', 'Water Temp')"><div class="lbl">Water Temp</div><div class="val"><span id="v-tw">-</span> <span class="unit">&deg;C</span></div></div>
+  </div>
+
+  <h3 style="color:#8b5cf6; margin-top:25px;">Tank Room</h3>
+  <div class="grid">
+    <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
+    <div class="card" onclick="openDetails('rmh', 'Relative Humidity')"><div class="lbl">Room Humidity</div><div class="val"><span id="v-rmh">-</span> <span class="unit">%</span></div></div>
+    <div class="card" onclick="openDetails('leak', 'Leak Detection')"><div class="lbl">Floor Status</div><div class="val" id="v-leak">-</div></div>
+    <div class="card" onclick="openDetails('light', 'Room Light')"><div class="lbl">Room Lighting</div><div class="val" id="v-rl">-</div></div>
+  </div>
+
+  <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
+  <div class="grid">
+    <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
+    <div class="card" onclick="openDetails('rmp', 'Atmo Pressure')"><div class="lbl">Outdoor Pressure</div><div class="val"><span id="v-rmp">-</span> <span class="unit">hPa</span></div></div>
+    <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Rain Intensity</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
+  </div>
+</div>
+
+<!-- DETAILS & ALERTS PAGE -->
+<div class="container" id="details-page">
+  <div class="header">
+    <button class="btn" onclick="closeDetails()">🔙 Back</button>
+    <h2 id="det-title">Metric Details</h2>
   </div>
   
-  <!-- DETAILS & ALERTS PAGE -->
-  <div class="container" id="details-page">
-    <div class="header">
-      <button class="btn" onclick="closeDetails()">🔙 Back</button>
-      <h2 id="det-title">Metric Details</h2>
-    </div>
-    
-    <div class="time-tabs">
-      <div class="tab active">24H</div><div class="tab">7D</div><div class="tab">30D</div>
-    </div>
-    
-    <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
-  
-    <div class="alert-box">
-      <h4>🔔 Notification Alerts</h4>
-      <div id="alert-ui"></div>
-      <button class="btn" onclick="saveAlert()" style="margin-top:10px; width:100%;">Save Alert Rules</button>
-    </div>
+  <div class="time-tabs">
+    <div class="tab active">24H</div><div class="tab">7D</div><div class="tab">30D</div>
   </div>
   
-  <script>
-    // 🔴 PASTE URL HERE 🔴
-    firebase.initializeApp({ databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/" });
-    const db = firebase.database();
-    let currentMetric = '';
-  
-    // 1. LIVE DATA LISTENER (WebSocket - Updates instantly)
-    db.ref('rooftop/live').on('value', (snap) => {
-      const d = snap.val();
-      if(!d) return;
-      document.getElementById('v-tds1').innerText = d.tds1;
-      document.getElementById('v-tds2').innerText = d.tds2;
-      document.getElementById('v-tank').innerText = d.tank;
-      document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(0);
-      document.getElementById('v-flow').innerText = d.flow;
-      document.getElementById('v-tw').innerText = d.tw;
-      document.getElementById('v-to').innerText = d.to;
-      document.getElementById('v-rmt').innerText = d.rmt;
-      document.getElementById('v-rmh').innerText = d.rmh;
-      document.getElementById('v-rmp').innerText = d.rmp;
-      document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
-      document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
-      document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
-    });
-  
-    // 2. UI NAVIGATION & ALERT LOGIC
-    function openDetails(metricId, title) {
-      currentMetric = metricId;
-      document.getElementById('dash-page').style.display = 'none';
-      document.getElementById('details-page').style.display = 'block';
-      document.getElementById('det-title').innerText = title;
-      
-      const ui = document.getElementById('alert-ui');
-      
-      // Custom Alert Logic UI Injector
-      if (metricId === 'leak') {
-        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Send Telegram if leak detected</label>`;
-      } else if (metricId === 'light') {
-        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if left on for</label> 
-                        <input type="number" id="a-val" style="width:60px;" placeholder="Hrs"> Hours`;
-      } else if (metricId === 'tds') {
-        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
-                        <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
-      } else if (metricId === 'vol') {
-        ui.innerHTML = `No alerts available for this metric.`;
-      } else {
-        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
-                        <div class="alert-row">
-                          <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
-                          <input type="number" id="a-val" placeholder="Threshold">
-                        </div>`;
-      }
-  
-      // Fetch existing rules from Firebase and populate
-      if(metricId !== 'vol') {
-        db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
-          if(s.val()) {
-            document.getElementById('a-active').checked = s.val().active;
-            if(document.getElementById('a-val')) document.getElementById('a-val').value = s.val().val;
-            if(document.getElementById('a-cond')) document.getElementById('a-cond').value = s.val().cond;
-          }
-        });
-      }
-      
-      // (Placeholder for History Chart fetching logic)
+  <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
+
+  <div class="alert-box">
+    <h4>🔔 Notification & Automation Controls</h4>
+    <div id="alert-ui"></div>
+    <button class="btn" onclick="saveAlert()" style="margin-top:10px; width:100%;">Save Cloud Rules</button>
+  </div>
+</div>
+
+<script>
+  firebase.initializeApp({ databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/" });
+  const db = firebase.database();
+  let currentMetric = '';
+
+  db.ref('rooftop/live').on('value', (snap) => {
+    const d = snap.val();
+    if(!d) return;
+    document.getElementById('v-tds1').innerText = d.tds1;
+    document.getElementById('v-tds2').innerText = d.tds2;
+    document.getElementById('v-tank').innerText = d.tank;
+    document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(0);
+    document.getElementById('v-flow').innerText = d.flow;
+    document.getElementById('v-tw').innerText = d.tw;
+    document.getElementById('v-to').innerText = d.to;
+    document.getElementById('v-rmt').innerText = d.rmt;
+    document.getElementById('v-rmh').innerText = d.rmh;
+    document.getElementById('v-rmp').innerText = d.rmp;
+    
+    document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
+    document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
+    document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
+  });
+
+  function openDetails(metricId, title) {
+    currentMetric = metricId;
+    document.getElementById('dash-page').style.display = 'none';
+    document.getElementById('details-page').style.display = 'block';
+    document.getElementById('det-title').innerText = title;
+    
+    const ui = document.getElementById('alert-ui');
+    
+    if (metricId === 'leak') {
+      ui.innerHTML = `<label><input type="checkbox" id="a-active"> Send Telegram if leak detected</label>`;
+    } else if (metricId === 'light') {
+      ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if left on for</label> 
+                      <input type="number" id="a-val" style="width:60px;" placeholder="Hrs"> Hours`;
+    } else if (metricId === 'tds') {
+      ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
+                      <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
+    } else if (metricId === 'flow') {
+      ui.innerHTML = `<label style="color:#0ea5e9; font-weight:bold;">Trigger Tuya Pump ON when flow exceeds:</label><br>
+                      <div class="alert-row" style="margin-top:10px;">
+                        <input type="number" step="0.1" id="a-val" placeholder="L/min"> <span class="unit">L/min</span>
+                      </div>
+                      <p style="font-size:12px; color:gray;">Pump automatically shuts off after 150s of flow remaining below this threshold to protect against phantom leaks.</p>`;
+    } else if (metricId === 'vol' || metricId === 'tank') {
+      ui.innerHTML = `No alerts available for this metric.`;
+    } else {
+      ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
+                      <div class="alert-row">
+                        <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
+                        <input type="number" id="a-val" placeholder="Threshold">
+                      </div>`;
     }
-  
-    function saveAlert() {
-      if(currentMetric === 'vol') return;
-      const rule = { active: document.getElementById('a-active').checked };
-      if(document.getElementById('a-val')) rule.val = parseFloat(document.getElementById('a-val').value);
-      if(document.getElementById('a-cond')) rule.cond = document.getElementById('a-cond').value;
-      
-      db.ref('rooftop/alerts/' + currentMetric).set(rule);
-      alert("Alert Rule Saved to Cloud.");
+
+    if(metricId !== 'vol' && metricId !== 'tank') {
+      db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
+        if(s.val()) {
+          if(document.getElementById('a-active')) document.getElementById('a-active').checked = s.val().active;
+          if(document.getElementById('a-val')) document.getElementById('a-val').value = s.val().val;
+          if(document.getElementById('a-cond')) document.getElementById('a-cond').value = s.val().cond;
+        }
+      });
     }
-  
-    function closeDetails() {
-      document.getElementById('details-page').style.display = 'none';
-      document.getElementById('dash-page').style.display = 'block';
-    }
-  </script>
-  </body></html>
+  }
+
+  function saveAlert() {
+    if(currentMetric === 'vol' || currentMetric === 'tank') return;
+    
+    // Default active to true for metrics that don't use checkboxes (like Flow)
+    const isActiveCheck = document.getElementById('a-active');
+    const rule = { active: isActiveCheck ? isActiveCheck.checked : true };
+    
+    if(document.getElementById('a-val')) rule.val = parseFloat(document.getElementById('a-val').value);
+    if(document.getElementById('a-cond')) rule.cond = document.getElementById('a-cond').value;
+    
+    db.ref('rooftop/alerts/' + currentMetric).set(rule);
+    alert("Automation settings saved successfully to the Cloud.");
+  }
+
+  function closeDetails() {
+    document.getElementById('details-page').style.display = 'none';
+    document.getElementById('dash-page').style.display = 'block';
+  }
+</script>
+</body></html>
