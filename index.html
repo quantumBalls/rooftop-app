@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tank Room">
   <link rel="apple-touch-icon" href="icon.png">
-  
+
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -48,15 +48,17 @@
   
     <h3 style="color:#8b5cf6; margin-top:25px;">Tank Room</h3>
     <div class="grid">
+      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
+      <div class="card" onclick="openDetails('rmh', 'Relative Humidity')"><div class="lbl">Room Humidity</div><div class="val"><span id="v-rmh">-</span> <span class="unit">%</span></div></div>
       <div class="card" onclick="openDetails('leak', 'Leak Detection')"><div class="lbl">Floor Status</div><div class="val" id="v-leak">-</div></div>
       <div class="card" onclick="openDetails('light', 'Room Light')"><div class="lbl">Room Lighting</div><div class="val" id="v-rl">-</div></div>
-      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
     </div>
   
     <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
     <div class="grid">
       <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
       <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Rain Intensity</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
+      <div class="card" onclick="openDetails('rmp', 'Atmo Pressure')"><div class="lbl">Outdoor Pressure</div><div class="val"><span id="v-rmp">-</span> <span class="unit">hPa</span></div></div>
     </div>
   </div>
   
@@ -98,7 +100,8 @@
       document.getElementById('v-tw').innerText = d.tw;
       document.getElementById('v-to').innerText = d.to;
       document.getElementById('v-rmt').innerText = d.rmt;
-      
+      document.getElementById('v-rmh').innerText = d.rmh;
+      document.getElementById('v-rmp').innerText = d.rmp;
       document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
