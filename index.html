@@ -1,0 +1,108 @@
+<!DOCTYPE html><html><head>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Rooftop Operations</title>
+<!-- Google Firebase Web SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+  :root { --bg: #f0f2f5; --card: #ffffff; --water: #0ea5e9; --room: #8b5cf6; --out: #10b981; --text: #1e293b; --muted: #64748b; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px 10px; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 { text-align: center; font-size: 24px; margin-bottom: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  .btn-sync { display: block; width: 100%; max-width: 300px; margin: 0 auto 20px auto; background: #1e293b; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+  .btn-sync:active { background: #0f172a; transform: translateY(1px); }
+  
+  .section-title { font-size: 18px; font-weight: 700; margin: 30px 0 15px 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
+  .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.04); border-top: 4px solid #ccc; }
+  
+  .card.water { border-color: var(--water); }
+  .card.room { border-color: var(--room); }
+  .card.out { border-color: var(--out); }
+  
+  .lbl { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .reading { font-size: 28px; font-weight: 700; color: var(--text); margin: 10px 0 0 0; }
+  .unit { font-size: 16px; font-weight: 500; color: var(--muted); }
+  .status-text { font-size: 22px; font-weight: 700; }
+</style></head><body>
+
+<div class="container">
+  <h1>Rooftop Operations</h1>
+  <!-- Top Sync Button -->
+  <button class="btn-sync" onclick="fetchData()">Fetch Latest Data</button>
+
+  <!-- WATER SECTION -->
+  <div class="section-title" style="color: var(--water);">Water Systems</div>
+  <div class="grid">
+    <div class="card water"><div class="lbl">Tank R2 Purity</div><div class="reading"><span id="v-tds1">--</span> <span class="unit">PPM</span></div></div>
+    <div class="card water"><div class="lbl">Tank R3 Purity</div><div class="reading"><span id="v-tds2">--</span> <span class="unit">PPM</span></div></div>
+    <div class="card water"><div class="lbl">Tank R3 Level</div><div class="reading"><span id="v-dist">--</span> <span class="unit">cm</span></div></div>
+    <div class="card water"><div class="lbl">Mainline Intake Flow</div><div class="reading"><span id="v-flow">--</span> <span class="unit">L/min</span></div></div>
+    <div class="card water"><div class="lbl">Tank R3 Temp</div><div class="reading"><span id="v-tw">--</span> <span class="unit">&deg;C</span></div></div>
+  </div>
+
+  <!-- ROOM SECTION -->
+  <div class="section-title" style="color: var(--room);">Tank Room Environment</div>
+  <div class="grid">
+    <div class="card room"><div class="lbl">Leak Detection</div><div class="reading status-text" id="v-leak" style="color: var(--room);">--</div></div>
+    <div class="card room"><div class="lbl">Room Lighting</div><div class="reading status-text" id="v-rl" style="color: var(--room);">--</div></div>
+    <div class="card room"><div class="lbl">Ambient Temp</div><div class="reading"><span id="v-rmt">--</span> <span class="unit">&deg;C</span></div></div>
+    <div class="card room"><div class="lbl">Relative Humidity</div><div class="reading"><span id="v-rmh">--</span> <span class="unit">%</span></div></div>
+    <div class="card room"><div class="lbl">Atmo Pressure</div><div class="reading"><span id="v-rmp">--</span> <span class="unit">hPa</span></div></div>
+  </div>
+
+  <!-- OUTSIDE SECTION -->
+  <div class="section-title" style="color: var(--out);">Outdoor Environment</div>
+  <div class="grid">
+    <div class="card out"><div class="lbl">Outdoor Temp</div><div class="reading"><span id="v-to">--</span> <span class="unit">&deg;C</span></div></div>
+    <div class="card out"><div class="lbl">Rain Intensity</div><div class="reading"><span id="v-rain">--</span> <span class="unit">%</span></div></div>
+    <div class="card out"><div class="lbl">Outdoor Light</div><div class="reading"><span id="v-ol">--</span> <span class="unit">Raw</span></div></div>
+  </div>
+
+  <br>
+  <!-- Bottom Sync Button -->
+  <button class="btn-sync" onclick="fetchData()">Fetch Latest Data</button>
+</div>
+
+<script>
+  // 🔴 PASTE YOUR FIREBASE URL BELOW 🔴
+  const firebaseConfig = {
+    databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/
+"
+  };
+  
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function fetchData() {
+    const buttons = document.querySelectorAll('.btn-sync');
+    buttons.forEach(b => b.innerText = "Syncing...");
+
+    db.ref('rooftop/live').once('value').then((snapshot) => {
+      const data = snapshot.val();
+      if(data) {
+        document.getElementById('v-tds1').innerText = data.tds1;
+        document.getElementById('v-tds2').innerText = data.tds2;
+        document.getElementById('v-dist').innerText = data.dist;
+        document.getElementById('v-flow').innerText = data.flow;
+        document.getElementById('v-tw').innerText = data.tw;
+        document.getElementById('v-to').innerText = data.to;
+        document.getElementById('v-rmt').innerText = data.rmt;
+        document.getElementById('v-rmh').innerText = data.rmh;
+        document.getElementById('v-rmp').innerText = data.rmp;
+        document.getElementById('v-rain').innerText = data.rain;
+        document.getElementById('v-ol').innerText = data.ol;
+        document.getElementById('v-leak').innerText = data.leak;
+        document.getElementById('v-rl').innerText = data.rl;
+      }
+      setTimeout(() => buttons.forEach(b => b.innerText = "Fetch Latest Data"), 500);
+    }).catch(error => {
+      alert("Network Error: Could not reach database.");
+      buttons.forEach(b => b.innerText = "Fetch Latest Data");
+    });
+  }
+  
+  // Auto-fetch immediately when page loads
+  window.onload = fetchData;
+</script>
+</body></html>
