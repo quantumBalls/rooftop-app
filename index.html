@@ -15,7 +15,9 @@
     :root { --bg: #f4f7f6; --card: #fff; --primary: #2563eb; --text: #1e293b; --muted: #64748b; }
     body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
     .container { max-width: 900px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .header { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; text-align: center; }
+    .header h2 { margin: 0; font-size: 24px; font-weight: 700; }
+    .sync-time { font-size: 13px; color: var(--muted); margin-top: 5px; font-weight: 600; }
     .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
     .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; }
@@ -26,7 +28,7 @@
     
     /* Details Page */
     #details-page { display: none; }
-    .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; }
+    .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; text-align: left; }
     .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
     input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; max-width: 200px; box-sizing: border-box; }
     .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
@@ -35,12 +37,15 @@
   </style></head><body>
   
   <div class="container" id="dash-page">
-    <div class="header"><h2>🏢 Rooftop Operations</h2></div>
+    <div class="header">
+      <h2>🏢 Rooftop Operations</h2>
+      <div class="sync-time">Last Synced: <span id="v-sync-time" style="color: #2563eb;">--:--:--</span></div>
+    </div>
     
     <h3 style="color:#0ea5e9;">Water Systems</h3>
     <div class="grid">
       <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
-      <div class="card" onclick="openDetails('tank', 'Tank Capacity')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
+      <div class="card" onclick="openDetails('tank', 'Tank Capacity Alert')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
       <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
       <div class="card" onclick="openDetails('flow', 'Pump Automation Control')"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
       <div class="card" onclick="openDetails('tw', 'Water Temp')"><div class="lbl">Water Temp</div><div class="val"><span id="v-tw">-</span> <span class="unit">&deg;C</span></div></div>
@@ -48,10 +53,10 @@
   
     <h3 style="color:#8b5cf6; margin-top:25px;">Tank Room</h3>
     <div class="grid">
-      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
-      <div class="card" onclick="openDetails('rmh', 'Relative Humidity')"><div class="lbl">Room Humidity</div><div class="val"><span id="v-rmh">-</span> <span class="unit">%</span></div></div>
       <div class="card" onclick="openDetails('leak', 'Leak Detection')"><div class="lbl">Floor Status</div><div class="val" id="v-leak">-</div></div>
       <div class="card" onclick="openDetails('light', 'Room Light')"><div class="lbl">Room Lighting</div><div class="val" id="v-rl">-</div></div>
+      <div class="card" onclick="openDetails('rmt', 'Room Temp')"><div class="lbl">Room Temp</div><div class="val"><span id="v-rmt">-</span> <span class="unit">&deg;C</span></div></div>
+      <div class="card" onclick="openDetails('rmh', 'Relative Humidity')"><div class="lbl">Room Humidity</div><div class="val"><span id="v-rmh">-</span> <span class="unit">%</span></div></div>
     </div>
   
     <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
@@ -65,7 +70,7 @@
   <!-- DETAILS & ALERTS PAGE -->
   <div class="container" id="details-page">
     <div class="header">
-      <button class="btn" onclick="closeDetails()">🔙 Back</button>
+      <button class="btn" onclick="closeDetails()" style="align-self: flex-start; margin-bottom: 10px;">🔙 Back</button>
       <h2 id="det-title">Metric Details</h2>
     </div>
     
@@ -104,6 +109,10 @@
       document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
+      
+      // 🕒 Live update Browser-Local sync timestamp
+      const now = new Date();
+      document.getElementById('v-sync-time').innerText = now.toLocaleTimeString();
     });
   
     function openDetails(metricId, title) {
@@ -122,6 +131,12 @@
       } else if (metricId === 'tds') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
                         <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
+      } else if (metricId === 'tank') { // 🚨 New Tank Level alert interface configuration
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if Tank level is:</label><br>
+                        <div class="alert-row" style="margin-top:10px;">
+                          <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
+                          <input type="number" id="a-val" placeholder="Percentage %"> <span class="unit">%</span>
+                        </div>`;
       } else if (metricId === 'flow') {
         ui.innerHTML = `
           <label style="color:#2563eb; font-weight:bold;">1. Faucet Flow Threshold (Turn ON):</label><br>
@@ -139,7 +154,7 @@
             <input type="number" id="a-delay" placeholder="e.g., 120"> <span class="unit">Seconds</span>
           </div>
           <p style="font-size:12px; color:gray; margin-top:10px;">The pump is triggered ON when flow exceeds the faucet limit. If flow drops below the leak threshold (while running), the pump turns OFF automatically after the delay.</p>`;
-      } else if (metricId === 'vol' || metricId === 'tank') {
+      } else if (metricId === 'vol') {
         ui.innerHTML = `No alerts available for this metric.`;
       } else {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
@@ -149,7 +164,7 @@
                         </div>`;
       }
   
-      if(metricId !== 'vol' && metricId !== 'tank') {
+      if(metricId !== 'vol') {
         db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
           if(s.val()) {
             if(document.getElementById('a-active')) document.getElementById('a-active').checked = s.val().active;
@@ -163,7 +178,7 @@
     }
   
     function saveAlert() {
-      if(currentMetric === 'vol' || currentMetric === 'tank') return;
+      if(currentMetric === 'vol') return;
       
       const isActiveCheck = document.getElementById('a-active');
       const rule = { active: isActiveCheck ? isActiveCheck.checked : true };
