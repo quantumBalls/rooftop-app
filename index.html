@@ -28,7 +28,7 @@
     #details-page { display: none; }
     .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; }
     .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-    input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
+    input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; max-width: 200px; box-sizing: border-box; }
     .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
     .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
     .tab.active { background: var(--primary); color: white; }
@@ -42,7 +42,7 @@
       <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
       <div class="card" onclick="openDetails('tank', 'Tank Capacity')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
       <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
-      <div class="card" onclick="openDetails('flow', 'Pump Automation Threshold')"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
+      <div class="card" onclick="openDetails('flow', 'Pump Automation Control')"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
       <div class="card" onclick="openDetails('tw', 'Water Temp')"><div class="lbl">Water Temp</div><div class="val"><span id="v-tw">-</span> <span class="unit">&deg;C</span></div></div>
     </div>
   
@@ -78,7 +78,7 @@
     <div class="alert-box">
       <h4>🔔 Notification & Automation Controls</h4>
       <div id="alert-ui"></div>
-      <button class="btn" onclick="saveAlert()" style="margin-top:10px; width:100%;">Save Cloud Rules</button>
+      <button class="btn" onclick="saveAlert()" style="margin-top:15px; width:100%;">Save Cloud Rules</button>
     </div>
   </div>
   
@@ -118,16 +118,27 @@
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Send Telegram if leak detected</label>`;
       } else if (metricId === 'light') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if left on for</label> 
-                        <input type="number" id="a-val" style="width:60px;" placeholder="Hrs"> Hours`;
+                        <input type="number" id="a-val" style="width:100px;" placeholder="Hrs"> Hours`;
       } else if (metricId === 'tds') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
                         <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
       } else if (metricId === 'flow') {
-        ui.innerHTML = `<label style="color:#0ea5e9; font-weight:bold;">Trigger Tuya Pump ON when flow exceeds:</label><br>
-                        <div class="alert-row" style="margin-top:10px;">
-                          <input type="number" step="0.1" id="a-val" placeholder="L/min"> <span class="unit">L/min</span>
-                        </div>
-                        <p style="font-size:12px; color:gray;">Pump automatically shuts off after 150s of flow remaining below this threshold to protect against phantom leaks.</p>`;
+        ui.innerHTML = `
+          <label style="color:#2563eb; font-weight:bold;">1. Faucet Flow Threshold (Turn ON):</label><br>
+          <div class="alert-row" style="margin-top:5px; margin-bottom:15px;">
+            <input type="number" step="0.1" id="a-val" placeholder="e.g., 1.5"> <span class="unit">L/min</span>
+          </div>
+          
+          <label style="color:#ef4444; font-weight:bold;">2. Leak Flow Threshold (Turn OFF if below):</label><br>
+          <div class="alert-row" style="margin-top:5px; margin-bottom:15px;">
+            <input type="number" step="0.1" id="a-low-val" placeholder="e.g., 0.5"> <span class="unit">L/min</span>
+          </div>
+          
+          <label style="color:#10b981; font-weight:bold;">3. Off-Timer Delay:</label><br>
+          <div class="alert-row" style="margin-top:5px;">
+            <input type="number" id="a-delay" placeholder="e.g., 120"> <span class="unit">Seconds</span>
+          </div>
+          <p style="font-size:12px; color:gray; margin-top:10px;">The pump is triggered ON when flow exceeds the faucet limit. If flow drops below the leak threshold (while running), the pump turns OFF automatically after the delay.</p>`;
       } else if (metricId === 'vol' || metricId === 'tank') {
         ui.innerHTML = `No alerts available for this metric.`;
       } else {
@@ -144,6 +155,8 @@
             if(document.getElementById('a-active')) document.getElementById('a-active').checked = s.val().active;
             if(document.getElementById('a-val')) document.getElementById('a-val').value = s.val().val;
             if(document.getElementById('a-cond')) document.getElementById('a-cond').value = s.val().cond;
+            if(document.getElementById('a-low-val')) document.getElementById('a-low-val').value = s.val().low_val;
+            if(document.getElementById('a-delay')) document.getElementById('a-delay').value = s.val().delay;
           }
         });
       }
@@ -157,6 +170,8 @@
       
       if(document.getElementById('a-val')) rule.val = parseFloat(document.getElementById('a-val').value);
       if(document.getElementById('a-cond')) rule.cond = document.getElementById('a-cond').value;
+      if(document.getElementById('a-low-val')) rule.low_val = parseFloat(document.getElementById('a-low-val').value);
+      if(document.getElementById('a-delay')) rule.delay = parseInt(document.getElementById('a-delay').value);
       
       db.ref('rooftop/alerts/' + currentMetric).set(rule);
       alert("Automation settings saved successfully to the Cloud.");
