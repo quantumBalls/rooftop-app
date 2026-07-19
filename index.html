@@ -1,4 +1,6 @@
-<!DOCTYPE html><html><head>
+<!DOCTYPE html>
+<html>
+<head>
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>Rooftop Operations</title>
   <!-- PWA & Apple iOS Tags -->
@@ -34,7 +36,9 @@
     .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
     .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
     .tab.active { background: var(--primary); color: white; }
-  </style></head><body>
+  </style>
+</head>
+<body>
   
   <div class="container" id="dash-page">
     <div class="header">
@@ -62,7 +66,8 @@
     <h3 style="color:#10b981; margin-top:25px;">Outdoors</h3>
     <div class="grid">
       <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
-      <div class="card" onclick="openDetails('rmp', 'Atmo Pressure')"><div class="lbl">Outdoor Pressure</div><div class="val"><span id="v-rmp">-</span> <span class="unit">hPa</span></div></div>
+      <div class="card" onclick="openDetails('ol', 'Outdoor Light Intensity')"><div class="lbl">Light Intensity</div><div class="val"><span id="v-ol">-</span> <span class="unit">Lux</span></div></div>
+      <div class="card" onclick="openDetails('sol_kwh', 'Daily Accumulated Sunlight Energy')"><div class="lbl">Total Sunlight Power</div><div class="val" style="color: #f59e0b;"><span id="v-sol_kwh">-</span> <span class="unit">kWh</span></div></div>
       <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Rain Intensity</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
     </div>
   </div>
@@ -75,15 +80,15 @@
     </div>
     
     <div class="time-tabs">
-      <div class="tab active">24H</div><div class="tab">7D</div><div class="tab">30D</div>
+      <div class="tab active">History Logs</div>
     </div>
     
     <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
   
-    <div class="alert-box">
+    <div class="alert-box" id="alert-control-wrapper">
       <h4>🔔 Notification & Automation Controls</h4>
       <div id="alert-ui"></div>
-      <button class="btn" onclick="saveAlert()" style="margin-top:15px; width:100%;">Save Cloud Rules</button>
+      <button class="btn" id="btn-save-rule" onclick="saveAlert()" style="margin-top:15px; width:100%;">Save Cloud Rules</button>
     </div>
   </div>
   
@@ -91,42 +96,42 @@
     firebase.initializeApp({ databaseURL: "https://rooftop-telemetry-default-rtdb.europe-west1.firebasedatabase.app/" });
     const db = firebase.database();
     let currentMetric = '';
+    let chartInstance = null;
   
     db.ref('rooftop/live').on('value', (snap) => {
       const d = snap.val();
       if(!d) return;
       document.getElementById('v-tds1').innerText = d.tds1;
       document.getElementById('v-tds2').innerText = d.tds2;
-      document.getElementById('v-tank').innerText = d.tank;
+      document.getElementById('v-tank').innerText = d.tank === -1 ? "ERR" : d.tank;
       document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(0);
       document.getElementById('v-flow').innerText = d.flow;
       document.getElementById('v-tw').innerText = d.tw;
       document.getElementById('v-to').innerText = d.to;
       document.getElementById('v-rmt').innerText = d.rmt;
       document.getElementById('v-rmh').innerText = d.rmh;
-      document.getElementById('v-rmp').innerText = d.rmp;
+      document.getElementById('v-ol').innerText = d.ol;
+      document.getElementById('v-sol_kwh').innerText = parseFloat(d.sol_kwh).toFixed(3);
       
       document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
       
-// 🕒 Convert ESP32 Unix Epoch to browser-local human readable time and date
-if (d.ts) {
-      const lastPushTime = new Date(d.ts * 1000); // Multiply by 1000 to convert seconds to milliseconds
-      
-      // Extract calendar components manually to guarantee the strict dd/mm/yy architecture
-      const dd = String(lastPushTime.getDate()).padStart(2, '0');
-      const mm = String(lastPushTime.getMonth() + 1).padStart(2, '0'); // January evaluates as 0 inside JS
-      const yy = String(lastPushTime.getFullYear()).slice(-2);        // Extract the trailing two digits
-      
-      const dateString = `${dd}/${mm}/${yy}`;
-      const timeString = lastPushTime.toLocaleTimeString(); // Automatically resolves system AM/PM formatting
-      
-      // Combines perfectly as "19/07/26 1:45:22 PM"
-      document.getElementById('v-sync-time').innerText = `${dateString} ${timeString}`;
-    } else {
-      document.getElementById('v-sync-time').innerText = "Offline";
-    }
+      // 🕒 Convert ESP32 Unix Epoch to browser-local human readable time and date
+      if (d.ts) {
+        const lastPushTime = new Date(d.ts * 1000); 
+        
+        const dd = String(lastPushTime.getDate()).padStart(2, '0');
+        const mm = String(lastPushTime.getMonth() + 1).padStart(2, '0'); 
+        const yy = String(lastPushTime.getFullYear()).slice(-2);        
+        
+        const dateString = `${dd}/${mm}/${yy}`;
+        const timeString = lastPushTime.toLocaleTimeString(); 
+        
+        document.getElementById('v-sync-time').innerText = `${dateString} ${timeString}`;
+      } else {
+        document.getElementById('v-sync-time').innerText = "Offline";
+      }
     });
   
     function openDetails(metricId, title) {
@@ -136,8 +141,18 @@ if (d.ts) {
       document.getElementById('det-title').innerText = title;
       
       const ui = document.getElementById('alert-ui');
+      const saveBtn = document.getElementById('btn-save-rule');
+      const alertBox = document.getElementById('alert-control-wrapper');
       
-      if (metricId === 'leak') {
+      // Reset visibility defaults
+      alertBox.style.display = "block";
+      saveBtn.style.display = "block";
+      
+      // Handle strict alert requirements per configuration schema
+      if (metricId === 'ol' || metricId === 'sol_kwh' || metricId === 'vol') {
+        ui.innerHTML = `<p style="color:var(--muted); font-weight:600; margin:0;">No alerts available or required for this environmental metric.</p>`;
+        saveBtn.style.display = "none";
+      } else if (metricId === 'leak') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Send Telegram if leak detected</label>`;
       } else if (metricId === 'light') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if left on for</label> 
@@ -145,11 +160,17 @@ if (d.ts) {
       } else if (metricId === 'tds') {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
                         <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
-      } else if (metricId === 'tank') { // 🚨 New Tank Level alert interface configuration
-        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if Tank level is:</label><br>
+      } else if (metricId === 'tank') { 
+        // 🚨 Tank Level alert configuration maps explicitly to discrete level integers (1 to 4)
+        ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if Tank level matches condition:</label><br>
                         <div class="alert-row" style="margin-top:10px;">
                           <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
-                          <input type="number" id="a-val" placeholder="Percentage %"> <span class="unit">%</span>
+                          <select id="a-val">
+                            <option value="1">Level 1 (10% Capacity)</option>
+                            <option value="2">Level 2 (30% Capacity)</option>
+                            <option value="3">Level 3 (60% Capacity)</option>
+                            <option value="4">Level 4 (90%+ Full)</option>
+                          </select>
                         </div>`;
       } else if (metricId === 'flow') {
         ui.innerHTML = `
@@ -166,10 +187,7 @@ if (d.ts) {
           <label style="color:#10b981; font-weight:bold;">3. Off-Timer Delay:</label><br>
           <div class="alert-row" style="margin-top:5px;">
             <input type="number" id="a-delay" placeholder="e.g., 120"> <span class="unit">Seconds</span>
-          </div>
-          <p style="font-size:12px; color:gray; margin-top:10px;">The pump is triggered ON when flow exceeds the faucet limit. If flow drops below the leak threshold (while running), the pump turns OFF automatically after the delay.</p>`;
-      } else if (metricId === 'vol') {
-        ui.innerHTML = `No alerts available for this metric.`;
+          </div>`;
       } else {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
                         <div class="alert-row">
@@ -178,7 +196,8 @@ if (d.ts) {
                         </div>`;
       }
   
-      if(metricId !== 'vol') {
+      // Sync rule adjustments from Cloud database
+      if(metricId !== 'vol' && metricId !== 'ol' && metricId !== 'sol_kwh') {
         db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
           if(s.val()) {
             if(document.getElementById('a-active')) document.getElementById('a-active').checked = s.val().active;
@@ -189,10 +208,69 @@ if (d.ts) {
           }
         });
       }
+      
+      // Load and display historical logs onto the canvas instance
+      loadHistoricalChart(metricId);
+    }
+  
+    function loadHistoricalChart(metricId) {
+      db.ref('rooftop/history').limitToLast(48).once('value').then(snap => {
+        const dataLog = snap.val();
+        const timestamps = [];
+        const measurements = [];
+        
+        if (dataLog) {
+          Object.keys(dataLog).forEach(key => {
+            const entry = dataLog[key];
+            if (entry.ts) {
+              const dateObj = new Date(entry.ts * 1000);
+              timestamps.push(`${dateObj.getDate()}/${dateObj.getMonth()+1} ${dateObj.getHours()}:00`);
+            } else {
+              timestamps.push('');
+            }
+            
+            // Map keys directly out of the Firebase DB history array schema
+            if (metricId === 'tds') measurements.push(entry.tds || 0);
+            else if (metricId === 'tw') measurements.push(entry.tw || 0);
+            else if (metricId === 'to') measurements.push(entry.to || 0);
+            else if (metricId === 'vol') measurements.push(entry.vol || 0);
+            else if (metricId === 'leak') measurements.push(entry.leak || 0);
+            else if (metricId === 'sol_kwh') measurements.push(entry.sol_kwh || 0);
+            else if (metricId === 'ol') measurements.push(entry.ol || 0); 
+            else measurements.push(entry[metricId] || 0);
+          });
+        }
+        
+        const ctx = document.getElementById('histChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        
+        chartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: timestamps,
+            datasets: [{
+              label: metricId.toUpperCase() + ' History Timeline',
+              data: measurements,
+              borderColor: '#2563eb',
+              backgroundColor: 'rgba(37, 99, 235, 0.05)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      });
     }
   
     function saveAlert() {
-      if(currentMetric === 'vol') return;
+      if(currentMetric === 'vol' || currentMetric === 'ol' || currentMetric === 'sol_kwh') return;
       
       const isActiveCheck = document.getElementById('a-active');
       const rule = { active: isActiveCheck ? isActiveCheck.checked : true };
@@ -211,4 +289,5 @@ if (d.ts) {
       document.getElementById('dash-page').style.display = 'block';
     }
   </script>
-  </body></html>
+</body>
+</html>
