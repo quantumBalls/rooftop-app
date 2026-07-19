@@ -110,12 +110,20 @@
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
       
-    // 🕒 Convert ESP32 Unix Epoch to browser-local human readable time
-    if (d.ts) {
+// 🕒 Convert ESP32 Unix Epoch to browser-local human readable time and date
+if (d.ts) {
       const lastPushTime = new Date(d.ts * 1000); // Multiply by 1000 to convert seconds to milliseconds
       
-      // Formats nicely as "1:45:22 PM" (or 24h depending on your phone's locale settings)
-      document.getElementById('v-sync-time').innerText = lastPushTime.toLocaleTimeString();
+      // Extract calendar components manually to guarantee the strict dd/mm/yy architecture
+      const dd = String(lastPushTime.getDate()).padStart(2, '0');
+      const mm = String(lastPushTime.getMonth() + 1).padStart(2, '0'); // January evaluates as 0 inside JS
+      const yy = String(lastPushTime.getFullYear()).slice(-2);        // Extract the trailing two digits
+      
+      const dateString = `${dd}/${mm}/${yy}`;
+      const timeString = lastPushTime.toLocaleTimeString(); // Automatically resolves system AM/PM formatting
+      
+      // Combines perfectly as "19/07/26 1:45:22 PM"
+      document.getElementById('v-sync-time').innerText = `${dateString} ${timeString}`;
     } else {
       document.getElementById('v-sync-time').innerText = "Offline";
     }
