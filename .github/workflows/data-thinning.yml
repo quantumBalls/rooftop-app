@@ -1,0 +1,29 @@
+name: Nightly Firebase Data Thinning
+
+# Trigger the script automatically at 00:00 UTC (03:00 AM local time)
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows you to click a "Run Action" button manually for testing
+
+jobs:
+  thinning_job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Execute ETL Thinning Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+        run: node scripts/firebase-thinning.js

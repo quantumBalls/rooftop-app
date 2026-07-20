@@ -1,0 +1,9 @@
+{
+    "name": "rooftop-data-pipeline",
+    "version": "1.0.0",
+    "description": "Automated Firebase Data Thinning",
+    "main": "scripts/firebase-thinning.js",
+    "dependencies": {
+      "firebase-admin": "^11.10.1"
+    }
+  }
