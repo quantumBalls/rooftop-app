@@ -50,41 +50,54 @@ async function runThinning() {
     }
   }
 
-  // 2. Mathematical Aggregation Engine
-  const aggregateBucket = (entries, bucketTs) => {
-    let count = entries.length;
-    let sumTw = 0, sumTo = 0, sumRmt = 0, sumRmh = 0, sumTds = 0, sumVol = 0;
-    let maxLeak = 0, maxRain = 0, maxSol = 0;
+// 2. Mathematical Aggregation Engine
+const aggregateBucket = (entries, bucketTs) => {
+  let count = entries.length;
+  let sumTw = 0, sumTo = 0, sumRmt = 0, sumRmh = 0, sumTdsDiff = 0, sumVol = 0, sumOl = 0, sumTank = 0;
+  let tankCount = 0;
+  let maxLeak = 0, maxRl = 0, maxRain = 0, maxSol = 0;
 
-    entries.forEach(e => {
-      sumTw += (e.tw || 0);
-      sumTo += (e.to || 0);
-      sumRmt += (e.rmt || 0);
-      sumRmh += (e.rmh || 0);
-      sumTds += (e.tds || 0);
-      
-      // Volumes are cumulative within the hour/day
-      sumVol += (e.vol || 0); 
-      
-      // Discrete traps & daily totals keep the highest recorded peak
-      if ((e.leak || 0) > maxLeak) maxLeak = e.leak;
-      if ((e.rain || 0) > maxRain) maxRain = e.rain;
-      if ((e.sol_kwh || 0) > maxSol) maxSol = e.sol_kwh;
-    });
+  entries.forEach(e => {
+    sumTw += (e.tw || 0);
+    sumTo += (e.to || 0);
+    sumRmt += (e.rmt || 0);
+    sumRmh += (e.rmh || 0);
+    sumTdsDiff += (e.tds_diff || 0);
+    sumOl += (e.ol || 0);
+    
+    if (e.tank !== undefined && e.tank >= 0) { 
+      sumTank += e.tank; 
+      tankCount++; 
+    }
+    
+    sumVol += (e.vol || 0); 
+    
+    if ((e.leak || 0) > maxLeak) maxLeak = e.leak;
+    if ((e.rl || 0) > maxRl) maxRl = e.rl;
+    if ((e.rain || 0) > maxRain) maxRain = e.rain;
+    if ((e.sol_kwh || 0) > maxSol) maxSol = e.sol_kwh;
+  });
 
-    return {
-      ts: bucketTs,
-      tw: parseFloat((sumTw / count).toFixed(1)),
-      to: parseFloat((sumTo / count).toFixed(1)),
-      rmt: parseFloat((sumRmt / count).toFixed(1)),
-      rmh: parseFloat((sumRmh / count).toFixed(1)),
-      tds: Math.round(sumTds / count),
-      vol: parseFloat(sumVol.toFixed(3)),
-      leak: maxLeak,
-      rain: maxRain,
-      sol_kwh: parseFloat(maxSol.toFixed(3))
-    };
+  const result = {
+    ts: bucketTs,
+    tw: parseFloat((sumTw / count).toFixed(1)),
+    to: parseFloat((sumTo / count).toFixed(1)),
+    rmt: parseFloat((sumRmt / count).toFixed(1)),
+    rmh: parseFloat((sumRmh / count).toFixed(1)),
+    tds_diff: Math.round(sumTdsDiff / count),
+    ol: Math.round(sumOl / count),
+    vol: parseFloat(sumVol.toFixed(3)),
+    sol_kwh: parseFloat(maxSol.toFixed(3))
   };
+  
+  // Omit boolean/variable keys entirely if 0 to maintain byte efficiency
+  if (tankCount > 0) result.tank = Math.round(sumTank / tankCount);
+  if (maxLeak === 1) result.leak = 1;
+  if (maxRl === 1) result.rl = 1;
+  if (maxRain === 1) result.rain = 1;
+
+  return result;
+};
 
   // 3. Process the Hourly Buckets
   for (const [ts, entries] of Object.entries(hourlyBuckets)) {
@@ -100,6 +113,7 @@ async function runThinning() {
 
   // 5. Overwrite the Firebase History array with the fully compressed dataset
   await ref.set(updatedHistory);
+  await db.ref("rooftop/system/last_thinning").set(Math.floor(Date.now() / 1000));
   console.log(`Thinning complete. Database optimized down to ${Object.keys(updatedHistory).length} core nodes.`);
   process.exit(0);
 }

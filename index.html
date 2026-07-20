@@ -45,12 +45,16 @@
   <div class="container" id="dash-page">
     <div class="header">
       <h2>🏢 Rooftop Operations</h2>
-      <div class="sync-time">Last Synced: <span id="v-sync-time" style="color: #2563eb;">--:--:--</span></div>
+      <div class="sync-time" style="display:flex; flex-direction:column; gap:4px; align-items:center; margin-top:10px;">
+        <div style="background:#eef2ff; padding:4px 12px; border-radius:12px;">Live Sync: <span id="v-sync-time" style="color: #2563eb;">--:--:--</span></div>
+        <div style="background:#ecfdf5; padding:4px 12px; border-radius:12px;">Last History Save: <span id="v-hist-time" style="color: #10b981;">--:--:--</span></div>
+        <div style="background:#f5f3ff; padding:4px 12px; border-radius:12px;">Last DB Optimization: <span id="v-opt-time" style="color: #8b5cf6;">--:--:--</span></div>
+      </div>
     </div>
     
     <h3 style="color:#0ea5e9;">Water Systems</h3>
     <div class="grid">
-      <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank R2 / R3 TDS</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
+      <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank Filter TDS Differential (R2-R3)</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
       <div class="card" onclick="openDetails('tank', 'Tank Capacity Alert')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
       <div class="card" onclick="openDetails('vol', 'Daily Consumption')"><div class="lbl">Water Consumed Today</div><div class="val" style="color:#0ea5e9;"><span id="v-vol">-</span> <span class="unit">Liters</span></div></div>
       <div class="card" onclick="openDetails('flow', 'Pump Automation Control')"><div class="lbl">Live Flow</div><div class="val"><span id="v-flow">-</span> <span class="unit">L/min</span></div></div>
@@ -108,6 +112,7 @@
     let chartInstance = null;
     let masterChartData = []; 
   
+    // 1. Live Data Listener (Updates Live Sync)
     db.ref('rooftop/live').on('value', (snap) => {
       const d = snap.val();
       if(!d) return;
@@ -127,19 +132,29 @@
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
       
-      if (d.ts) {
-        const lastPushTime = new Date(d.ts * 1000); 
-        const dd = String(lastPushTime.getDate()).padStart(2, '0');
-        const mm = String(lastPushTime.getMonth() + 1).padStart(2, '0'); 
-        const yy = String(lastPushTime.getFullYear()).slice(-2);        
-        
-        const dateString = `${dd}/${mm}/${yy}`;
-        const timeString = lastPushTime.toLocaleTimeString(); 
-        document.getElementById('v-sync-time').innerText = `${dateString} ${timeString}`;
-      } else {
-        document.getElementById('v-sync-time').innerText = "Offline";
-      }
+      if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
     });
+
+    // 2. History Node Listener (Updates Last History Save)
+    db.ref('rooftop/history').orderByKey().limitToLast(1).on('value', (snap) => {
+      snap.forEach(child => {
+        if (child.val().ts) document.getElementById('v-hist-time').innerText = formatTimestamp(child.val().ts);
+      });
+    });
+
+    // 3. System Listener (Updates Last DB Optimization)
+    db.ref('rooftop/system/last_thinning').on('value', (snap) => {
+      if (snap.val()) document.getElementById('v-opt-time').innerText = formatTimestamp(snap.val());
+    });
+
+    // Universal Date Formatter
+    function formatTimestamp(unixSeconds) {
+      const d = new Date(unixSeconds * 1000);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      return `${dd}/${mm}/${yy} ${d.toLocaleTimeString()}`;
+    }
   
     function openDetails(metricId, title) {
       currentMetric = metricId;
@@ -231,15 +246,17 @@
             const entry = dataLog[key];
             let val = 0;
             
-            if (metricId === 'tds') val = entry.tds || 0;
+            if (metricId === 'tds') val = entry.tds_diff || 0;
             else if (metricId === 'tw') val = entry.tw || 0;
             else if (metricId === 'to') val = entry.to || 0;
             else if (metricId === 'rmt') val = entry.rmt || 0; 
             else if (metricId === 'rmh') val = entry.rmh || 0; 
             else if (metricId === 'vol') val = entry.vol || 0;
-            else if (metricId === 'leak') val = entry.leak || 0;
+            else if (metricId === 'leak') val = entry.leak || 0;     
+            else if (metricId === 'light') val = entry.rl || 0;      
             else if (metricId === 'sol_kwh') val = entry.sol_kwh || 0;
             else if (metricId === 'ol') val = entry.ol || 0; 
+            else if (metricId === 'tank') val = entry.tank || 0;     
             else val = entry[metricId] || 0;
 
             if (entry.ts) {
@@ -247,7 +264,11 @@
             }
           });
         }
-        filterChartRange(24);
+
+        // 🎯 FIX: Explicitly sort data chronologically to solve the alphabetical key bug
+        masterChartData.sort((a, b) => a.ts - b.ts);
+
+        filterChartRange(24); // Load 24H view by default
       });
     }
 
@@ -259,10 +280,25 @@
       
       const timestamps = filtered.map(d => {
         const dateObj = new Date(d.ts);
+        
         if (hours <= 24) {
-          return `${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+          // 🕒 24H View: Round cleanly to the nearest 5-minute interval
+          let hh = dateObj.getHours();
+          let mm = Math.round(dateObj.getMinutes() / 5) * 5;
+          
+          if (mm === 60) {
+            mm = 0;
+            hh = (hh + 1) % 24;
+          }
+          
+          return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
         } else {
-          return `${dateObj.getDate()}/${dateObj.getMonth()+1}`;
+          // 🗓️ Long-Range Views: Drop raw minutes entirely, display clean integer clock hours
+          const day = dateObj.getDate();
+          const month = dateObj.getMonth() + 1;
+          const hr = String(dateObj.getHours()).padStart(2, '0');
+          
+          return `${day}/${month} ${hr}:00`;
         }
       });
       
@@ -283,11 +319,19 @@
             borderWidth: 2, fill: true, tension: 0.2
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true }
+          }
+        }
       });
       
+      // Keep your tab management state active
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.getElementById(`tab-${hours}`).classList.add('active');
+      const activeTab = document.getElementById(`tab-${hours}`);
+      if (activeTab) activeTab.classList.add('active');
     }
   
     function saveAlert() {
