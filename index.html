@@ -74,7 +74,7 @@
       <div class="card" onclick="openDetails('to', 'Outdoor Temp')"><div class="lbl">Outdoor Temp</div><div class="val"><span id="v-to">-</span> <span class="unit">&deg;C</span></div></div>
       <div class="card" onclick="openDetails('ol', 'Outdoor Light Intensity')"><div class="lbl">Light Intensity</div><div class="val"><span id="v-ol">-</span> <span class="unit">Lux</span></div></div>
       <div class="card" onclick="openDetails('sol_kwh', 'Daily Accumulated Sunlight Energy')"><div class="lbl">Total Sunlight Power</div><div class="val" style="color: #f59e0b;"><span id="v-sol_kwh">-</span> <span class="unit">kWh</span></div></div>
-      <div class="card" onclick="openDetails('rain', 'Rain')"><div class="lbl">Ground Moisture</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
+      <div class="card" onclick="openDetails('rain', 'Ground Moisture')"><div class="lbl">Ground Moisture</div><div class="val"><span id="v-rain">-</span> <span class="unit">%</span></div></div>
     </div>
   </div>
   
@@ -96,7 +96,7 @@
       <div class="tab" id="tab-43800" onclick="filterChartRange(43800)">5Y</div>
     </div>
     
-    <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
+    <div style="background:white; padding:15px; border-radius:12px; height:400px; position:relative;"><canvas id="histChart"></canvas></div>
   
     <div class="alert-box" id="alert-control-wrapper">
       <h4>🔔 Notification & Automation Controls</h4>
@@ -207,7 +207,11 @@
           <div class="alert-row" style="margin-top:5px;">
             <input type="number" id="a-delay" placeholder="e.g., 120"> <span class="unit">Seconds</span>
           </div>`;
-      } else {
+      } else if (metricId === 'rain') {
+              let rawRain = entry.rain !== undefined ? entry.rain : 1023; // Default to 1023 (bone dry) if missing
+              val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100)); // Converts analog to 0-100%
+            } 
+      else {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
                         <div class="alert-row">
                           <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>

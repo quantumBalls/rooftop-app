@@ -53,9 +53,9 @@ async function runThinning() {
 // 2. Mathematical Aggregation Engine
 const aggregateBucket = (entries, bucketTs) => {
   let count = entries.length;
-  let sumTw = 0, sumTo = 0, sumRmt = 0, sumRmh = 0, sumTdsDiff = 0, sumVol = 0, sumOl = 0, sumTank = 0;
+  let sumTw = 0, sumTo = 0, sumRmt = 0, sumRmh = 0, sumTdsDiff = 0, sumVol = 0, sumOl = 0, sumTank = 0, sumRain = 0;
   let tankCount = 0;
-  let maxLeak = 0, maxRl = 0, maxRain = 0, maxSol = 0;
+  let maxLeak = 0, maxRl = 0, maxSol = 0;
 
   entries.forEach(e => {
     sumTw += (e.tw || 0);
@@ -64,6 +64,7 @@ const aggregateBucket = (entries, bucketTs) => {
     sumRmh += (e.rmh || 0);
     sumTdsDiff += (e.tds_diff || 0);
     sumOl += (e.ol || 0);
+    sumRain += (e.rain || 1023);
     
     if (e.tank !== undefined && e.tank >= 0) { 
       sumTank += e.tank; 
@@ -86,6 +87,7 @@ const aggregateBucket = (entries, bucketTs) => {
     rmh: parseFloat((sumRmh / count).toFixed(1)),
     tds_diff: Math.round(sumTdsDiff / count),
     ol: Math.round(sumOl / count),
+    rain: Math.round(sumRain / count),
     vol: parseFloat(sumVol.toFixed(3)),
     sol_kwh: parseFloat(maxSol.toFixed(3))
   };
