@@ -3,7 +3,6 @@
 <head>
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>Rooftop Operations</title>
-  <!-- PWA & Apple iOS Tags -->
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -28,14 +27,17 @@
     .val { font-size: 28px; font-weight: 700; margin: 5px 0; }
     .unit { font-size: 14px; color: var(--muted); }
     
-    /* Details Page */
     #details-page { display: none; }
     .alert-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #c7d2fe; text-align: left; }
     .alert-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
     input, select { padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; max-width: 200px; box-sizing: border-box; }
-    .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
+    
+    .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
     .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
     .tab.active { background: var(--primary); color: white; }
+    
+    /* Hide scrollbar for tabs */
+    .time-tabs::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body>
@@ -80,7 +82,14 @@
     </div>
     
     <div class="time-tabs">
-      <div class="tab active">History Logs</div>
+      <div class="tab active" id="tab-24" onclick="filterChartRange(24)">24H</div>
+      <div class="tab" id="tab-168" onclick="filterChartRange(168)">7D</div>
+      <div class="tab" id="tab-360" onclick="filterChartRange(360)">15D</div>
+      <div class="tab" id="tab-720" onclick="filterChartRange(720)">1M</div>
+      <div class="tab" id="tab-2160" onclick="filterChartRange(2160)">3M</div>
+      <div class="tab" id="tab-4320" onclick="filterChartRange(4320)">6M</div>
+      <div class="tab" id="tab-8760" onclick="filterChartRange(8760)">1Y</div>
+      <div class="tab" id="tab-43800" onclick="filterChartRange(43800)">5Y</div>
     </div>
     
     <div style="background:white; padding:15px; border-radius:12px;"><canvas id="histChart"></canvas></div>
@@ -97,6 +106,7 @@
     const db = firebase.database();
     let currentMetric = '';
     let chartInstance = null;
+    let masterChartData = []; 
   
     db.ref('rooftop/live').on('value', (snap) => {
       const d = snap.val();
@@ -117,17 +127,14 @@
       document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
       
-      // 🕒 Convert ESP32 Unix Epoch to browser-local human readable time and date
       if (d.ts) {
         const lastPushTime = new Date(d.ts * 1000); 
-        
         const dd = String(lastPushTime.getDate()).padStart(2, '0');
         const mm = String(lastPushTime.getMonth() + 1).padStart(2, '0'); 
         const yy = String(lastPushTime.getFullYear()).slice(-2);        
         
         const dateString = `${dd}/${mm}/${yy}`;
         const timeString = lastPushTime.toLocaleTimeString(); 
-        
         document.getElementById('v-sync-time').innerText = `${dateString} ${timeString}`;
       } else {
         document.getElementById('v-sync-time').innerText = "Offline";
@@ -144,11 +151,9 @@
       const saveBtn = document.getElementById('btn-save-rule');
       const alertBox = document.getElementById('alert-control-wrapper');
       
-      // Reset visibility defaults
       alertBox.style.display = "block";
       saveBtn.style.display = "block";
       
-      // Handle strict alert requirements per configuration schema
       if (metricId === 'ol' || metricId === 'sol_kwh' || metricId === 'vol') {
         ui.innerHTML = `<p style="color:var(--muted); font-weight:600; margin:0;">No alerts available or required for this environmental metric.</p>`;
         saveBtn.style.display = "none";
@@ -161,15 +166,14 @@
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert if TDS1 - TDS2 is LESS than:</label><br> 
                         <input type="number" id="a-val" placeholder="PPM Difference"> PPM`;
       } else if (metricId === 'tank') { 
-        // 🚨 Tank Level alert configuration maps explicitly to discrete level integers (1 to 4)
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if Tank level matches condition:</label><br>
                         <div class="alert-row" style="margin-top:10px;">
                           <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
                           <select id="a-val">
-                            <option value="1">Level 1 (10% Capacity)</option>
-                            <option value="2">Level 2 (30% Capacity)</option>
-                            <option value="3">Level 3 (60% Capacity)</option>
-                            <option value="4">Level 4 (90%+ Full)</option>
+                            <option value="10">Level 1 (10% Capacity)</option>
+                            <option value="30">Level 2 (30% Capacity)</option>
+                            <option value="60">Level 3 (60% Capacity)</option>
+                            <option value="100">Level 4 (90%+ Full)</option>
                           </select>
                         </div>`;
       } else if (metricId === 'flow') {
@@ -196,77 +200,94 @@
                         </div>`;
       }
   
-      // Sync rule adjustments from Cloud database
       if(metricId !== 'vol' && metricId !== 'ol' && metricId !== 'sol_kwh') {
         db.ref('rooftop/alerts/' + metricId).once('value').then(s => {
           if(s.val()) {
-            if(document.getElementById('a-active')) document.getElementById('a-active').checked = s.val().active;
-            if(document.getElementById('a-val')) document.getElementById('a-val').value = s.val().val;
-            if(document.getElementById('a-cond')) document.getElementById('a-cond').value = s.val().cond;
-            if(document.getElementById('a-low-val')) document.getElementById('a-low-val').value = s.val().low_val;
-            if(document.getElementById('a-delay')) document.getElementById('a-delay').value = s.val().delay;
+            const elActive = document.getElementById('a-active');
+            const elVal = document.getElementById('a-val');
+            const elCond = document.getElementById('a-cond');
+            const elLowVal = document.getElementById('a-low-val');
+            const elDelay = document.getElementById('a-delay');
+            
+            if(elActive) elActive.checked = s.val().active;
+            if(elVal) elVal.value = s.val().val;
+            if(elCond) elCond.value = s.val().cond;
+            if(elLowVal) elLowVal.value = s.val().low_val;
+            if(elDelay) elDelay.value = s.val().delay;
           }
         });
       }
       
-      // Load and display historical logs onto the canvas instance
-      loadHistoricalChart(metricId);
+      loadHistoricalBuffer(metricId);
     }
   
-    function loadHistoricalChart(metricId) {
-      db.ref('rooftop/history').limitToLast(48).once('value').then(snap => {
+    function loadHistoricalBuffer(metricId) {
+      db.ref('rooftop/history').once('value').then(snap => {
         const dataLog = snap.val();
-        const timestamps = [];
-        const measurements = [];
+        masterChartData = [];
         
         if (dataLog) {
           Object.keys(dataLog).forEach(key => {
             const entry = dataLog[key];
-            if (entry.ts) {
-              const dateObj = new Date(entry.ts * 1000);
-              timestamps.push(`${dateObj.getDate()}/${dateObj.getMonth()+1} ${dateObj.getHours()}:00`);
-            } else {
-              timestamps.push('');
-            }
+            let val = 0;
             
-            // Map keys directly out of the Firebase DB history array schema
-            if (metricId === 'tds') measurements.push(entry.tds || 0);
-            else if (metricId === 'tw') measurements.push(entry.tw || 0);
-            else if (metricId === 'to') measurements.push(entry.to || 0);
-            else if (metricId === 'vol') measurements.push(entry.vol || 0);
-            else if (metricId === 'leak') measurements.push(entry.leak || 0);
-            else if (metricId === 'sol_kwh') measurements.push(entry.sol_kwh || 0);
-            else if (metricId === 'ol') measurements.push(entry.ol || 0); 
-            else measurements.push(entry[metricId] || 0);
+            if (metricId === 'tds') val = entry.tds || 0;
+            else if (metricId === 'tw') val = entry.tw || 0;
+            else if (metricId === 'to') val = entry.to || 0;
+            else if (metricId === 'rmt') val = entry.rmt || 0; 
+            else if (metricId === 'rmh') val = entry.rmh || 0; 
+            else if (metricId === 'vol') val = entry.vol || 0;
+            else if (metricId === 'leak') val = entry.leak || 0;
+            else if (metricId === 'sol_kwh') val = entry.sol_kwh || 0;
+            else if (metricId === 'ol') val = entry.ol || 0; 
+            else val = entry[metricId] || 0;
+
+            if (entry.ts) {
+              masterChartData.push({ ts: entry.ts * 1000, value: val });
+            }
           });
         }
-        
-        const ctx = document.getElementById('histChart').getContext('2d');
-        if (chartInstance) chartInstance.destroy();
-        
-        chartInstance = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: timestamps,
-            datasets: [{
-              label: metricId.toUpperCase() + ' History Timeline',
-              data: measurements,
-              borderColor: '#2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.05)',
-              borderWidth: 2,
-              fill: true,
-              tension: 0.2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: { beginAtZero: true }
-            }
-          }
-        });
+        filterChartRange(24);
       });
+    }
+
+    function filterChartRange(hours) {
+      const now = Date.now();
+      const cutoff = now - (hours * 3600000);
+      
+      const filtered = masterChartData.filter(d => d.ts >= cutoff);
+      
+      const timestamps = filtered.map(d => {
+        const dateObj = new Date(d.ts);
+        if (hours <= 24) {
+          return `${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+        } else {
+          return `${dateObj.getDate()}/${dateObj.getMonth()+1}`;
+        }
+      });
+      
+      const measurements = filtered.map(d => d.value);
+      
+      const ctx = document.getElementById('histChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: timestamps,
+          datasets: [{
+            label: currentMetric.toUpperCase() + ` Timeline`,
+            data: measurements,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+            borderWidth: 2, fill: true, tension: 0.2
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+      
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(`tab-${hours}`).classList.add('active');
     }
   
     function saveAlert() {
@@ -275,10 +296,18 @@
       const isActiveCheck = document.getElementById('a-active');
       const rule = { active: isActiveCheck ? isActiveCheck.checked : true };
       
-      if(document.getElementById('a-val')) rule.val = parseFloat(document.getElementById('a-val').value);
-      if(document.getElementById('a-cond')) rule.cond = document.getElementById('a-cond').value;
-      if(document.getElementById('a-low-val')) rule.low_val = parseFloat(document.getElementById('a-low-val').value);
-      if(document.getElementById('a-delay')) rule.delay = parseInt(document.getElementById('a-delay').value);
+      // Secure null checks prevent TypeError crashes
+      const elVal = document.getElementById('a-val');
+      if(elVal) rule.val = parseFloat(elVal.value);
+      
+      const elCond = document.getElementById('a-cond');
+      if(elCond) rule.cond = elCond.value;
+      
+      const elLowVal = document.getElementById('a-low-val');
+      if(elLowVal) rule.low_val = parseFloat(elLowVal.value);
+      
+      const elDelay = document.getElementById('a-delay');
+      if(elDelay) rule.delay = parseInt(elDelay.value);
       
       db.ref('rooftop/alerts/' + currentMetric).set(rule);
       alert("Automation settings saved successfully to the Cloud.");
