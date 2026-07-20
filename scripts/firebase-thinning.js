@@ -111,10 +111,16 @@ const aggregateBucket = (entries, bucketTs) => {
     updatedHistory[aggId] = aggregateBucket(entries, parseInt(ts));
   }
 
-  // 5. Overwrite the Firebase History array with the fully compressed dataset
+  // 5. Overwrite the Firebase History array
   await ref.set(updatedHistory);
+  
+  // Log optimization footprint
   await db.ref("rooftop/system/last_thinning").set(Math.floor(Date.now() / 1000));
-  console.log(`Thinning complete. Database optimized down to ${Object.keys(updatedHistory).length} core nodes.`);
+  console.log("Optimization timestamp committed securely.");
+
+  // 🎯 Cleanly terminate connection pool to flush all pending writes
+  await admin.app().delete(); 
+  console.log("Firebase pool flushed. Exiting cleanly.");
   process.exit(0);
 }
 
