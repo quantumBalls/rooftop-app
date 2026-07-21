@@ -260,7 +260,12 @@
             else if (metricId === 'light') val = entry.rl || 0;      
             else if (metricId === 'sol_kwh') val = entry.sol_kwh || 0;
             else if (metricId === 'ol') val = entry.ol || 0; 
-            else if (metricId === 'tank') val = entry.tank || 0;     
+            else if (metricId === 'tank') val = entry.tank || 0;
+            else if (metricId === 'rain') {
+              // 💧 Safely parse the raw analog rain data and convert to percentage
+              let rawRain = entry.rain !== undefined ? entry.rain : 1023;
+              val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
+            }
             else val = entry[metricId] || 0;
 
             if (entry.ts) {
@@ -269,11 +274,10 @@
           });
         }
 
-        // 🎯 FIX: Explicitly sort data chronologically to solve the alphabetical key bug
+        // Sort chronologically and render
         masterChartData.sort((a, b) => a.ts - b.ts);
-
-        filterChartRange(24); // Load 24H view by default
-      });
+        filterChartRange(24);
+      }).catch(err => console.error("Firebase read error: ", err));
     }
 
     function filterChartRange(hours) {

@@ -64,7 +64,9 @@ const aggregateBucket = (entries, bucketTs) => {
     sumRmh += (e.rmh || 0);
     sumTdsDiff += (e.tds_diff || 0);
     sumOl += (e.ol || 0);
-    sumRain += (e.rain || 1023);
+    
+    // Default to 1023 (bone dry) if data point was dropped
+    sumRain += (e.rain !== undefined ? e.rain : 1023); 
     
     if (e.tank !== undefined && e.tank >= 0) { 
       sumTank += e.tank; 
@@ -75,7 +77,6 @@ const aggregateBucket = (entries, bucketTs) => {
     
     if ((e.leak || 0) > maxLeak) maxLeak = e.leak;
     if ((e.rl || 0) > maxRl) maxRl = e.rl;
-    if ((e.rain || 0) > maxRain) maxRain = e.rain;
     if ((e.sol_kwh || 0) > maxSol) maxSol = e.sol_kwh;
   });
 
@@ -87,7 +88,7 @@ const aggregateBucket = (entries, bucketTs) => {
     rmh: parseFloat((sumRmh / count).toFixed(1)),
     tds_diff: Math.round(sumTdsDiff / count),
     ol: Math.round(sumOl / count),
-    rain: Math.round(sumRain / count),
+    rain: Math.round(sumRain / count), // Safely returns averaged continuous moisture
     vol: parseFloat(sumVol.toFixed(3)),
     sol_kwh: parseFloat(maxSol.toFixed(3))
   };
@@ -96,7 +97,6 @@ const aggregateBucket = (entries, bucketTs) => {
   if (tankCount > 0) result.tank = Math.round(sumTank / tankCount);
   if (maxLeak === 1) result.leak = 1;
   if (maxRl === 1) result.rl = 1;
-  if (maxRain === 1) result.rain = 1;
 
   return result;
 };
