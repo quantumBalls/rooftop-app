@@ -135,8 +135,8 @@
       if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
     });
 
-    // 2. History Node Listener (Updates Last History Save)
-    db.ref('rooftop/history').orderByKey().limitToLast(1).on('value', (snap) => {
+// 2. History Node Listener (Updates Last History Save)
+    db.ref('rooftop/history').orderByChild('ts').limitToLast(1).on('value', (snap) => {
       snap.forEach(child => {
         if (child.val().ts) document.getElementById('v-hist-time').innerText = formatTimestamp(child.val().ts);
       });
@@ -240,7 +240,7 @@
       loadHistoricalBuffer(metricId);
     }
   
-    function loadHistoricalBuffer(metricId) {
+function loadHistoricalBuffer(metricId) {
       db.ref('rooftop/history').once('value').then(snap => {
         const dataLog = snap.val();
         masterChartData = [];
@@ -248,39 +248,39 @@
         if (dataLog) {
           Object.keys(dataLog).forEach(key => {
             const entry = dataLog[key];
-            let val = 0;
+            let val;
             
-            if (metricId === 'tds') val = entry.tds_diff || 0;
-            else if (metricId === 'tw') val = entry.tw || 0;
-            else if (metricId === 'to') val = entry.to || 0;
-            else if (metricId === 'rmt') val = entry.rmt || 0; 
-            else if (metricId === 'rmh') val = entry.rmh || 0; 
-            else if (metricId === 'vol') val = entry.vol || 0;
-            else if (metricId === 'leak') val = entry.leak || 0;     
-            else if (metricId === 'light') val = entry.rl || 0;      
-            else if (metricId === 'sol_kwh') val = entry.sol_kwh || 0;
-            else if (metricId === 'ol') val = entry.ol || 0; 
-            else if (metricId === 'tank') val = entry.tank || 0;
+            // 1. Map to database keys
+            if (metricId === 'tds') val = entry.tds_diff;
+            else if (metricId === 'light') val = entry.rl;
             else if (metricId === 'rain') {
-              // 💧 Safely parse the raw analog rain data and convert to percentage
               let rawRain = entry.rain !== undefined ? entry.rain : 1023;
               val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
+            } else {
+              val = entry[metricId];
             }
-            else val = entry[metricId] || 0;
 
+            // 2. Reject Missing Data
+            if (val === undefined || val === null) return; // Acts as a "continue" to skip this loop iteration
+
+            // 3. Reject Physical Impossibilities (False Sensor Glitches)
+            if (['tw', 'to', 'rmt'].includes(metricId) && (val < -20 || val > 80)) return; // Kills -120 and -48
+            if (metricId === 'rmh' && (val < 0 || val > 100)) return;
+            if (['vol', 'ol', 'sol_kwh', 'tank', 'flow'].includes(metricId) && val < 0) return;
+
+            // If it passes all tests, add it to the rendering array!
             if (entry.ts) {
               masterChartData.push({ ts: entry.ts * 1000, value: val });
             }
           });
         }
 
-        // Sort chronologically and render
         masterChartData.sort((a, b) => a.ts - b.ts);
         filterChartRange(24);
       }).catch(err => console.error("Firebase read error: ", err));
     }
 
-    function filterChartRange(hours) {
+function filterChartRange(hours) {
       const now = Date.now();
       const cutoff = now - (hours * 3600000);
       
@@ -288,24 +288,15 @@
       
       const timestamps = filtered.map(d => {
         const dateObj = new Date(d.ts);
-        
         if (hours <= 24) {
-          // 🕒 24H View: Round cleanly to the nearest 5-minute interval
           let hh = dateObj.getHours();
           let mm = Math.round(dateObj.getMinutes() / 5) * 5;
-          
-          if (mm === 60) {
-            mm = 0;
-            hh = (hh + 1) % 24;
-          }
-          
+          if (mm === 60) { mm = 0; hh = (hh + 1) % 24; }
           return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
         } else {
-          // 🗓️ Long-Range Views: Drop raw minutes entirely, display clean integer clock hours
           const day = dateObj.getDate();
           const month = dateObj.getMonth() + 1;
           const hr = String(dateObj.getHours()).padStart(2, '0');
-          
           return `${day}/${month} ${hr}:00`;
         }
       });
@@ -324,19 +315,28 @@
             data: measurements,
             borderColor: '#2563eb',
             backgroundColor: 'rgba(37, 99, 235, 0.05)',
-            borderWidth: 2, fill: true, tension: 0.2
+            borderWidth: 2, 
+            fill: true, 
+            tension: 0.3,       // Curvier, smoother lines
+            pointRadius: 0,     // Hide the circles
+            pointHitRadius: 20, // Huge invisible touch target for your finger
+            spanGaps: true      // Automatically draw a straight line over any rejected data/time gaps
           }]
         },
         options: { 
           responsive: true, 
           maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',      // Triggers the vertical line crosshair
+            intersect: false,   // Allows scrolling without having to perfectly touch the line
+          },
           plugins: {
-            legend: { display: true }
+            legend: { display: true },
+            tooltip: { enabled: true }
           }
         }
       });
       
-      // Keep your tab management state active
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       const activeTab = document.getElementById(`tab-${hours}`);
       if (activeTab) activeTab.classList.add('active');
