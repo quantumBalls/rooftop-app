@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <style>
     :root { --bg: #f4f7f6; --card: #fff; --primary: #2563eb; --text: #1e293b; --muted: #64748b; }
     body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
@@ -119,7 +120,7 @@
       document.getElementById('v-tds1').innerText = d.tds1;
       document.getElementById('v-tds2').innerText = d.tds2;
       document.getElementById('v-tank').innerText = d.tank === -1 ? "ERR" : d.tank;
-      document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(0);
+      document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(2);
       document.getElementById('v-flow').innerText = d.flow;
       document.getElementById('v-tw').innerText = d.tw;
       document.getElementById('v-to').innerText = d.to;
@@ -239,128 +240,125 @@
     }
   
     function loadHistoricalBuffer(metricId) {
-      db.ref('rooftop/history').once('value').then(snap => {
-        const dataLog = snap.val();
-        masterChartData = [];
-        
-        if (dataLog) {
-          Object.keys(dataLog).forEach(key => {
-            const entry = dataLog[key];
-            let val = null;
-            let isError = false;
-  
-            // 1. Extract database key value
-            if (metricId === 'tds') val = entry.tds_diff;
-            else if (metricId === 'light') val = entry.rl;
-            else if (metricId === 'rain') {
-              let rawRain = entry.rain !== undefined ? entry.rain : 1023;
-              val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
-            } else {
-              val = entry[metricId];
-            }
-  
-            // 2. Error Sentinel & Bound Checks
-            if (val === undefined || val === null) {
-              isError = true;
-            } else if (typeof val === 'number') {
-              // Check for explicit error sentinels like -121 or -999
-              if (val === -121 || val <= -100) isError = true;
-  
-              // Metric physical boundary checks
-              if (['tw', 'to', 'rmt'].includes(metricId) && (val < -15 || val > 80)) isError = true;
-              if (metricId === 'rmh' && (val < 0 || val > 100)) isError = true;
-              if (['vol', 'ol', 'sol_kwh', 'tank', 'flow', 'tds', 'rain'].includes(metricId) && val < 0) isError = true;
-            }
-  
-            // 3. Store rounded value or null for gaps
-            if (entry.ts) {
-              let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
-              masterChartData.push({ ts: entry.ts * 1000, value: cleanVal });
-            }
-          });
-        }
-  
-        masterChartData.sort((a, b) => a.ts - b.ts);
-        filterChartRange(24);
-      }).catch(err => console.error("Firebase read error: ", err));
-    }
-  
-    function filterChartRange(hours) {
-      const now = Date.now();
-      const cutoff = now - (hours * 3600000);
+    db.ref('rooftop/history').once('value').then(snap => {
+      const dataLog = snap.val();
+      masterChartData = [];
       
-      const filtered = masterChartData.filter(d => d.ts >= cutoff);
-      
-      const timestamps = filtered.map(d => {
-        const dateObj = new Date(d.ts);
-        if (hours <= 24) {
-          let hh = dateObj.getHours();
-          let mm = Math.round(dateObj.getMinutes() / 5) * 5;
-          if (mm === 60) { mm = 0; hh = (hh + 1) % 24; }
-          return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-        } else {
-          const day = dateObj.getDate();
-          const month = dateObj.getMonth() + 1;
-          const hr = String(dateObj.getHours()).padStart(2, '0');
-          return `${day}/${month} ${hr}:00`;
-        }
-      });
-      
-      const measurements = filtered.map(d => d.value);
-      
-      const ctx = document.getElementById('histChart').getContext('2d');
-      if (chartInstance) chartInstance.destroy();
-      
-      chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: timestamps,
-          datasets: [{
-            label: currentMetric.toUpperCase() + ` Timeline`,
-            data: measurements,
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37, 99, 235, 0.05)',
-            borderWidth: 2, 
-            fill: true, 
-            tension: 0.2,
-            pointRadius: 0,
-            pointHitRadius: 20,
-            spanGaps: false // 🛑 Discontinues the line over null/error values
-          }]
+      if (dataLog) {
+        Object.keys(dataLog).forEach(key => {
+          const entry = dataLog[key];
+          let val = null;
+          let isError = false;
+
+          if (metricId === 'tds') val = entry.tds_diff;
+          else if (metricId === 'light') val = entry.rl;
+          else if (metricId === 'rain') {
+            let rawRain = entry.rain !== undefined ? entry.rain : 1023;
+            val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
+          } else {
+            val = entry[metricId];
+          }
+
+          if (val === undefined || val === null) {
+            isError = true;
+          } else if (typeof val === 'number') {
+            if (val === -121 || val <= -100) isError = true;
+
+            // 🛑 Added (val === 0) specifically to temperatures to reject your old historical errors
+            if (['tw', 'to', 'rmt'].includes(metricId) && (val === 0 || val < -15 || val > 80)) isError = true;
+            if (metricId === 'rmh' && (val === 0 || val < 0 || val > 100)) isError = true;
+            if (['vol', 'ol', 'sol_kwh', 'tank', 'flow', 'tds', 'rain'].includes(metricId) && val < 0) isError = true;
+          }
+
+          if (entry.ts) {
+            let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
+            // Store as raw data points {x, y} for the new Time Scale
+            masterChartData.push({ x: entry.ts * 1000, y: cleanVal });
+          }
+        });
+      }
+
+      masterChartData.sort((a, b) => a.x - b.x);
+      filterChartRange(24);
+    }).catch(err => console.error("Firebase read error: ", err));
+  }
+
+  function filterChartRange(hours) {
+    const now = Date.now();
+    const cutoff = now - (hours * 3600000);
+    
+    // Filter points that belong in the selected time window
+    const filteredData = masterChartData.filter(d => d.x >= cutoff);
+    
+    const ctx = document.getElementById('histChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+    
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: currentMetric.toUpperCase() + ` Timeline`,
+          data: filteredData, // Pass the {x, y} coordinates directly
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.05)',
+          borderWidth: 2, 
+          fill: true, 
+          tension: 0.2,
+          pointRadius: 0,
+          pointHitRadius: 20,
+          spanGaps: false
+        }]
+      },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
         },
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
-          plugins: {
-            legend: { display: true },
-            tooltip: { 
-              enabled: true,
-              callbacks: {
-                // 🎯 Displays tooltip values rounded to 1 decimal place
-                label: function(context) {
-                  let label = context.dataset.label || '';
-                  if (label) label += ': ';
-                  if (context.parsed.y !== null && context.parsed.y !== undefined) {
-                    label += context.parsed.y.toFixed(1);
-                  } else {
-                    label += 'No Data / Error';
-                  }
-                  return label;
+        scales: {
+          x: {
+            type: 'time', // 🕒 Enables mathematical timeline
+            time: {
+              unit: hours <= 24 ? 'hour' : 'day',
+              displayFormats: {
+                hour: 'HH:mm',
+                day: 'dd/MM'
+              }
+            },
+            min: cutoff, // 🛑 Hard-locks the left edge of the chart to exactly X hours ago
+            max: now,    // 🛑 Hard-locks the right edge to current time
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 12
+            }
+          }
+        },
+        plugins: {
+          legend: { display: true },
+          tooltip: { 
+            enabled: true,
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) label += ': ';
+                if (context.parsed.y !== null && context.parsed.y !== undefined) {
+                  label += context.parsed.y.toFixed(1);
+                } else {
+                  label += 'No Data / Error';
                 }
+                return label;
               }
             }
           }
         }
-      });
-      
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      const activeTab = document.getElementById(`tab-${hours}`);
-      if (activeTab) activeTab.classList.add('active');
-    }
+      }
+    });
+    
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const activeTab = document.getElementById(`tab-${hours}`);
+    if (activeTab) activeTab.classList.add('active');
+  }
   
     function saveAlert() {
       if(currentMetric === 'vol' || currentMetric === 'ol' || currentMetric === 'sol_kwh') return;
