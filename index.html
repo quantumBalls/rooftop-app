@@ -112,7 +112,7 @@
     let chartInstance = null;
     let masterChartData = []; 
   
-    // 1. Live Data Listener (Updates Live Sync)
+    // 1. Live Data Listener
     db.ref('rooftop/live').on('value', (snap) => {
       const d = snap.val();
       if(!d) return;
@@ -134,20 +134,19 @@
       
       if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
     });
-
-// 2. History Node Listener (Updates Last History Save)
+  
+    // 2. History Node Listener (Ordered by timestamp)
     db.ref('rooftop/history').orderByChild('ts').limitToLast(1).on('value', (snap) => {
       snap.forEach(child => {
         if (child.val().ts) document.getElementById('v-hist-time').innerText = formatTimestamp(child.val().ts);
       });
     });
-
-    // 3. System Listener (Updates Last DB Optimization)
+  
+    // 3. System Listener
     db.ref('rooftop/system/last_thinning').on('value', (snap) => {
       if (snap.val()) document.getElementById('v-opt-time').innerText = formatTimestamp(snap.val());
     });
-
-    // Universal Date Formatter
+  
     function formatTimestamp(unixSeconds) {
       const d = new Date(unixSeconds * 1000);
       const dd = String(d.getDate()).padStart(2, '0');
@@ -157,6 +156,9 @@
     }
   
     function openDetails(metricId, title) {
+      // 📌 Bring window scroll to top when opening details page
+      window.scrollTo(0, 0);
+  
       currentMetric = metricId;
       document.getElementById('dash-page').style.display = 'none';
       document.getElementById('details-page').style.display = 'block';
@@ -207,11 +209,7 @@
           <div class="alert-row" style="margin-top:5px;">
             <input type="number" id="a-delay" placeholder="e.g., 120"> <span class="unit">Seconds</span>
           </div>`;
-      } else if (metricId === 'rain') {
-              let rawRain = entry.rain !== undefined ? entry.rain : 1023; // Default to 1023 (bone dry) if missing
-              val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100)); // Converts analog to 0-100%
-            } 
-      else {
+      } else {
         ui.innerHTML = `<label><input type="checkbox" id="a-active"> Alert me if value is:</label><br>
                         <div class="alert-row">
                           <select id="a-cond"><option value="<">Under (<)</option><option value=">">Over (>)</option></select>
@@ -240,7 +238,7 @@
       loadHistoricalBuffer(metricId);
     }
   
-function loadHistoricalBuffer(metricId) {
+    function loadHistoricalBuffer(metricId) {
       db.ref('rooftop/history').once('value').then(snap => {
         const dataLog = snap.val();
         masterChartData = [];
@@ -248,9 +246,10 @@ function loadHistoricalBuffer(metricId) {
         if (dataLog) {
           Object.keys(dataLog).forEach(key => {
             const entry = dataLog[key];
-            let val;
-            
-            // 1. Map to database keys
+            let val = null;
+            let isError = false;
+  
+            // 1. Extract database key value
             if (metricId === 'tds') val = entry.tds_diff;
             else if (metricId === 'light') val = entry.rl;
             else if (metricId === 'rain') {
@@ -259,28 +258,34 @@ function loadHistoricalBuffer(metricId) {
             } else {
               val = entry[metricId];
             }
-
-            // 2. Reject Missing Data
-            if (val === undefined || val === null) return; // Acts as a "continue" to skip this loop iteration
-
-            // 3. Reject Physical Impossibilities (False Sensor Glitches)
-            if (['tw', 'to', 'rmt'].includes(metricId) && (val < -20 || val > 80)) return; // Kills -120 and -48
-            if (metricId === 'rmh' && (val < 0 || val > 100)) return;
-            if (['vol', 'ol', 'sol_kwh', 'tank', 'flow'].includes(metricId) && val < 0) return;
-
-            // If it passes all tests, add it to the rendering array!
+  
+            // 2. Error Sentinel & Bound Checks
+            if (val === undefined || val === null) {
+              isError = true;
+            } else if (typeof val === 'number') {
+              // Check for explicit error sentinels like -121 or -999
+              if (val === -121 || val <= -100) isError = true;
+  
+              // Metric physical boundary checks
+              if (['tw', 'to', 'rmt'].includes(metricId) && (val < -15 || val > 80)) isError = true;
+              if (metricId === 'rmh' && (val < 0 || val > 100)) isError = true;
+              if (['vol', 'ol', 'sol_kwh', 'tank', 'flow', 'tds', 'rain'].includes(metricId) && val < 0) isError = true;
+            }
+  
+            // 3. Store rounded value or null for gaps
             if (entry.ts) {
-              masterChartData.push({ ts: entry.ts * 1000, value: val });
+              let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
+              masterChartData.push({ ts: entry.ts * 1000, value: cleanVal });
             }
           });
         }
-
+  
         masterChartData.sort((a, b) => a.ts - b.ts);
         filterChartRange(24);
       }).catch(err => console.error("Firebase read error: ", err));
     }
-
-function filterChartRange(hours) {
+  
+    function filterChartRange(hours) {
       const now = Date.now();
       const cutoff = now - (hours * 3600000);
       
@@ -317,22 +322,37 @@ function filterChartRange(hours) {
             backgroundColor: 'rgba(37, 99, 235, 0.05)',
             borderWidth: 2, 
             fill: true, 
-            tension: 0.3,       // Curvier, smoother lines
-            pointRadius: 0,     // Hide the circles
-            pointHitRadius: 20, // Huge invisible touch target for your finger
-            spanGaps: true      // Automatically draw a straight line over any rejected data/time gaps
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 20,
+            spanGaps: false // 🛑 Discontinues the line over null/error values
           }]
         },
         options: { 
           responsive: true, 
           maintainAspectRatio: false,
           interaction: {
-            mode: 'index',      // Triggers the vertical line crosshair
-            intersect: false,   // Allows scrolling without having to perfectly touch the line
+            mode: 'index',
+            intersect: false,
           },
           plugins: {
             legend: { display: true },
-            tooltip: { enabled: true }
+            tooltip: { 
+              enabled: true,
+              callbacks: {
+                // 🎯 Displays tooltip values rounded to 1 decimal place
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) label += ': ';
+                  if (context.parsed.y !== null && context.parsed.y !== undefined) {
+                    label += context.parsed.y.toFixed(1);
+                  } else {
+                    label += 'No Data / Error';
+                  }
+                  return label;
+                }
+              }
+            }
           }
         }
       });
@@ -348,7 +368,6 @@ function filterChartRange(hours) {
       const isActiveCheck = document.getElementById('a-active');
       const rule = { active: isActiveCheck ? isActiveCheck.checked : true };
       
-      // Secure null checks prevent TypeError crashes
       const elVal = document.getElementById('a-val');
       if(elVal) rule.val = parseFloat(elVal.value);
       
