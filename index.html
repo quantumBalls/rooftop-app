@@ -114,27 +114,47 @@
     let masterChartData = []; 
   
     // 1. Live Data Listener
-    db.ref('rooftop/live').on('value', (snap) => {
-      const d = snap.val();
-      if(!d) return;
-      document.getElementById('v-tds1').innerText = d.tds1;
-      document.getElementById('v-tds2').innerText = d.tds2;
-      document.getElementById('v-tank').innerText = d.tank === -1 ? "ERR" : d.tank;
-      document.getElementById('v-vol').innerText = parseFloat(d.vol).toFixed(2);
-      document.getElementById('v-flow').innerText = d.flow;
-      document.getElementById('v-tw').innerText = d.tw;
-      document.getElementById('v-to').innerText = d.to;
-      document.getElementById('v-rmt').innerText = d.rmt;
-      document.getElementById('v-rmh').innerText = d.rmh;
-      document.getElementById('v-ol').innerText = d.ol;
-      document.getElementById('v-sol_kwh').innerText = parseFloat(d.sol_kwh).toFixed(3);
-      
-      document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
-      document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
-      document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
-      
-      if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
-    });
+db.ref('rooftop/live').on('value', (snap) => {
+  const d = snap.val();
+  if(!d) return;
+
+  // Standard Numeric Metrics
+  document.getElementById('v-tds1').innerText    = displayMetric(d.tds1);
+  document.getElementById('v-tds2').innerText    = displayMetric(d.tds2);
+  document.getElementById('v-tank').innerText    = (d.tank === -121 || d.tank === -1) ? "N/A" : d.tank;
+  document.getElementById('v-vol').innerText     = displayMetric(d.vol, 0);
+  document.getElementById('v-flow').innerText    = displayMetric(d.flow, 1);
+  document.getElementById('v-tw').innerText      = displayMetric(d.tw, 1);
+  document.getElementById('v-to').innerText      = displayMetric(d.to, 1);
+  document.getElementById('v-rmt').innerText     = displayMetric(d.rmt, 1);
+  document.getElementById('v-rmh').innerText     = displayMetric(d.rmh, 1);
+  document.getElementById('v-ol').innerText      = displayMetric(d.ol);
+  document.getElementById('v-sol_kwh').innerText = displayMetric(d.sol_kwh, 3);
+  
+  // Leak Sensor (With Sentinel Guard)
+  if (d.leak === -121 || d.leak <= -100 || d.leak === undefined) {
+    document.getElementById('v-leak').innerText = "N/A";
+  } else {
+    document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
+  }
+
+  // Room Light Relay/LDR (With Sentinel Guard)
+  if (d.rl === -121 || d.rl <= -100 || d.rl === undefined) {
+    document.getElementById('v-rl').innerText = "N/A";
+  } else {
+    document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
+  }
+
+  // Rain Sensor (With Sentinel Guard)
+  if (d.rain === -121 || d.rain <= -100 || d.rain === undefined) {
+    document.getElementById('v-rain').innerText = "N/A";
+  } else {
+    document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
+  }
+  
+  // Sync Timestamp
+  if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
+});
   
     // 2. History Node Listener (Ordered by timestamp)
     db.ref('rooftop/history').orderByChild('ts').limitToLast(1).on('value', (snap) => {
@@ -155,6 +175,16 @@
       const yy = String(d.getFullYear()).slice(-2);
       return `${dd}/${mm}/${yy} ${d.toLocaleTimeString()}`;
     }
+
+    // 🎯 Formats live metrics, displaying "N/A" if sensor returns an error sentinel (-121)
+function displayMetric(val, decimals = null) {
+  if (val === null || val === undefined || val === -121 || val <= -100) {
+    return "N/A";
+  }
+  if (decimals !== null && !isNaN(val)) {
+    return parseFloat(val).toFixed(decimals);
+  }
+  retu
   
     function openDetails(metricId, title) {
       // 📌 Bring window scroll to top when opening details page
