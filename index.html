@@ -37,6 +37,11 @@
     .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
     .tab.active { background: var(--primary); color: white; }
     .time-tabs::-webkit-scrollbar { display: none; }
+
+    /* Remote Terminal Styling */
+    .terminal-card { background: #0f172a; color: #38bdf8; font-family: monospace; border-radius: 12px; padding: 15px; margin-top: 20px; border: 1px solid #1e293b; }
+    .terminal-title { color: #94a3b8; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; }
+    .terminal-text { font-size: 13px; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -45,13 +50,19 @@
     <div class="header">
       <h2>🏢 Rooftop Operations</h2>
       <div class="sync-time" style="display:flex; flex-direction:column; gap:4px; align-items:center; margin-top:10px;">
-        <div style="background:#eef2ff; padding:4px 12px; border-radius:12px;">Live Sync: <span id="v-sync-time" style="color: #2563eb;">--:--:--</span></div>
+        <div style="background:#eef2ff; padding:4px 12px; border-radius:12px;">Live Sync (5s): <span id="v-sync-time" style="color: #2563eb;">--:--:--</span></div>
         <div style="background:#ecfdf5; padding:4px 12px; border-radius:12px;">Last History Save: <span id="v-hist-time" style="color: #10b981;">--:--:--</span></div>
         <div style="background:#f5f3ff; padding:4px 12px; border-radius:12px;">Last DB Optimization: <span id="v-opt-time" style="color: #8b5cf6;">--:--:--</span></div>
       </div>
     </div>
+
+    <!-- 📟 LIVE REMOTE TERMINAL LOGS -->
+    <div class="terminal-card">
+      <div class="terminal-title">📟 Live System Terminal</div>
+      <div class="terminal-text" id="sys-log">Connecting to ESP32 logs...</div>
+    </div>
     
-    <h3 style="color:#0ea5e9;">Water Systems</h3>
+    <h3 style="color:#0ea5e9; margin-top:25px;">Water Systems</h3>
     <div class="grid">
       <div class="card" onclick="openDetails('tds', 'Filter Purity Differential')"><div class="lbl">Tank Filter TDS Differential (R2-R3)</div><div class="val"><span id="v-tds1">-</span> / <span id="v-tds2">-</span> <span class="unit">PPM</span></div></div>
       <div class="card" onclick="openDetails('tank', 'Tank Capacity Alert')"><div class="lbl">Tank Level</div><div class="val"><span id="v-tank">-</span><span class="unit">%</span></div></div>
@@ -111,14 +122,9 @@
     let chartInstance = null;
     let masterChartData = []; 
 
-    // 🎯 Formats live metrics, displaying "N/A" if sensor returns an error sentinel (-121)
     function displayMetric(val, decimals = null) {
-      if (val === null || val === undefined || val === -121 || val <= -100) {
-        return "N/A";
-      }
-      if (decimals !== null && !isNaN(val)) {
-        return parseFloat(val).toFixed(decimals);
-      }
+      if (val === null || val === undefined || val === -121 || val <= -100) return "N/A";
+      if (decimals !== null && !isNaN(val)) return parseFloat(val).toFixed(decimals);
       return val;
     }
 
@@ -130,12 +136,18 @@
       return `${dd}/${mm}/${yy} ${d.toLocaleTimeString()}`;
     }
 
-    // 1. Live Data Listener
+    // 📟 0. Live Terminal Log Listener
+    db.ref('rooftop/sys_log').on('value', (snap) => {
+      if (snap.val()) {
+        document.getElementById('sys-log').innerText = snap.val();
+      }
+    });
+
+    // 1. Live Data Listener (Every 5s)
     db.ref('rooftop/live').on('value', (snap) => {
       const d = snap.val();
       if(!d) return;
 
-      // Standard Numeric Metrics
       document.getElementById('v-tds1').innerText    = displayMetric(d.tds1);
       document.getElementById('v-tds2').innerText    = displayMetric(d.tds2);
       document.getElementById('v-tank').innerText    = (d.tank === -121 || d.tank === -1) ? "N/A" : d.tank;
@@ -148,28 +160,24 @@
       document.getElementById('v-ol').innerText      = displayMetric(d.ol);
       document.getElementById('v-sol_kwh').innerText = displayMetric(d.sol_kwh, 3);
       
-      // Leak Sensor
       if (d.leak === -121 || d.leak <= -100 || d.leak === undefined) {
         document.getElementById('v-leak').innerText = "N/A";
       } else {
         document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
       }
 
-      // Room Light Relay/LDR
       if (d.rl === -121 || d.rl <= -100 || d.rl === undefined) {
         document.getElementById('v-rl').innerText = "N/A";
       } else {
         document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
       }
 
-      // Rain Sensor
       if (d.rain === -121 || d.rain <= -100 || d.rain === undefined) {
         document.getElementById('v-rain').innerText = "N/A";
       } else {
         document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
       }
       
-      // Sync Timestamp
       if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
     });
   
