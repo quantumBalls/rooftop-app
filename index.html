@@ -36,8 +36,6 @@
     .time-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
     .tab { padding: 6px 12px; background: #e2e8f0; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
     .tab.active { background: var(--primary); color: white; }
-    
-    /* Hide scrollbar for tabs */
     .time-tabs::-webkit-scrollbar { display: none; }
   </style>
 </head>
@@ -112,51 +110,70 @@
     let currentMetric = '';
     let chartInstance = null;
     let masterChartData = []; 
-  
+
+    // 🎯 Formats live metrics, displaying "N/A" if sensor returns an error sentinel (-121)
+    function displayMetric(val, decimals = null) {
+      if (val === null || val === undefined || val === -121 || val <= -100) {
+        return "N/A";
+      }
+      if (decimals !== null && !isNaN(val)) {
+        return parseFloat(val).toFixed(decimals);
+      }
+      return val;
+    }
+
+    function formatTimestamp(unixSeconds) {
+      const d = new Date(unixSeconds * 1000);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      return `${dd}/${mm}/${yy} ${d.toLocaleTimeString()}`;
+    }
+
     // 1. Live Data Listener
-db.ref('rooftop/live').on('value', (snap) => {
-  const d = snap.val();
-  if(!d) return;
+    db.ref('rooftop/live').on('value', (snap) => {
+      const d = snap.val();
+      if(!d) return;
 
-  // Standard Numeric Metrics
-  document.getElementById('v-tds1').innerText    = displayMetric(d.tds1);
-  document.getElementById('v-tds2').innerText    = displayMetric(d.tds2);
-  document.getElementById('v-tank').innerText    = (d.tank === -121 || d.tank === -1) ? "N/A" : d.tank;
-  document.getElementById('v-vol').innerText     = displayMetric(d.vol, 0);
-  document.getElementById('v-flow').innerText    = displayMetric(d.flow, 1);
-  document.getElementById('v-tw').innerText      = displayMetric(d.tw, 1);
-  document.getElementById('v-to').innerText      = displayMetric(d.to, 1);
-  document.getElementById('v-rmt').innerText     = displayMetric(d.rmt, 1);
-  document.getElementById('v-rmh').innerText     = displayMetric(d.rmh, 1);
-  document.getElementById('v-ol').innerText      = displayMetric(d.ol);
-  document.getElementById('v-sol_kwh').innerText = displayMetric(d.sol_kwh, 3);
-  
-  // Leak Sensor (With Sentinel Guard)
-  if (d.leak === -121 || d.leak <= -100 || d.leak === undefined) {
-    document.getElementById('v-leak').innerText = "N/A";
-  } else {
-    document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
-  }
+      // Standard Numeric Metrics
+      document.getElementById('v-tds1').innerText    = displayMetric(d.tds1);
+      document.getElementById('v-tds2').innerText    = displayMetric(d.tds2);
+      document.getElementById('v-tank').innerText    = (d.tank === -121 || d.tank === -1) ? "N/A" : d.tank;
+      document.getElementById('v-vol').innerText     = displayMetric(d.vol, 0);
+      document.getElementById('v-flow').innerText    = displayMetric(d.flow, 1);
+      document.getElementById('v-tw').innerText      = displayMetric(d.tw, 1);
+      document.getElementById('v-to').innerText      = displayMetric(d.to, 1);
+      document.getElementById('v-rmt').innerText     = displayMetric(d.rmt, 1);
+      document.getElementById('v-rmh').innerText     = displayMetric(d.rmh, 1);
+      document.getElementById('v-ol').innerText      = displayMetric(d.ol);
+      document.getElementById('v-sol_kwh').innerText = displayMetric(d.sol_kwh, 3);
+      
+      // Leak Sensor
+      if (d.leak === -121 || d.leak <= -100 || d.leak === undefined) {
+        document.getElementById('v-leak').innerText = "N/A";
+      } else {
+        document.getElementById('v-leak').innerText = (d.leak > 800) ? "Dry" : ((d.leak > 400) ? "Moist" : "LEAK");
+      }
 
-  // Room Light Relay/LDR (With Sentinel Guard)
-  if (d.rl === -121 || d.rl <= -100 || d.rl === undefined) {
-    document.getElementById('v-rl').innerText = "N/A";
-  } else {
-    document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
-  }
+      // Room Light Relay/LDR
+      if (d.rl === -121 || d.rl <= -100 || d.rl === undefined) {
+        document.getElementById('v-rl').innerText = "N/A";
+      } else {
+        document.getElementById('v-rl').innerText = (d.rl === 1) ? "ON" : "OFF";
+      }
 
-  // Rain Sensor (With Sentinel Guard)
-  if (d.rain === -121 || d.rain <= -100 || d.rain === undefined) {
-    document.getElementById('v-rain').innerText = "N/A";
-  } else {
-    document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
-  }
+      // Rain Sensor
+      if (d.rain === -121 || d.rain <= -100 || d.rain === undefined) {
+        document.getElementById('v-rain').innerText = "N/A";
+      } else {
+        document.getElementById('v-rain').innerText = Math.max(0, Math.min(100, ((1023 - d.rain) / 1023) * 100)).toFixed(0);
+      }
+      
+      // Sync Timestamp
+      if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
+    });
   
-  // Sync Timestamp
-  if (d.ts) document.getElementById('v-sync-time').innerText = formatTimestamp(d.ts);
-});
-  
-    // 2. History Node Listener (Ordered by timestamp)
+    // 2. History Node Listener
     db.ref('rooftop/history').orderByChild('ts').limitToLast(1).on('value', (snap) => {
       snap.forEach(child => {
         if (child.val().ts) document.getElementById('v-hist-time').innerText = formatTimestamp(child.val().ts);
@@ -168,28 +185,8 @@ db.ref('rooftop/live').on('value', (snap) => {
       if (snap.val()) document.getElementById('v-opt-time').innerText = formatTimestamp(snap.val());
     });
   
-    function formatTimestamp(unixSeconds) {
-      const d = new Date(unixSeconds * 1000);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yy = String(d.getFullYear()).slice(-2);
-      return `${dd}/${mm}/${yy} ${d.toLocaleTimeString()}`;
-    }
-
-    // 🎯 Formats live metrics, displaying "N/A" if sensor returns an error sentinel (-121)
-function displayMetric(val, decimals = null) {
-  if (val === null || val === undefined || val === -121 || val <= -100) {
-    return "N/A";
-  }
-  if (decimals !== null && !isNaN(val)) {
-    return parseFloat(val).toFixed(decimals);
-  }
-  retu
-  
     function openDetails(metricId, title) {
-      // 📌 Bring window scroll to top when opening details page
       window.scrollTo(0, 0);
-  
       currentMetric = metricId;
       document.getElementById('dash-page').style.display = 'none';
       document.getElementById('details-page').style.display = 'block';
@@ -270,125 +267,111 @@ function displayMetric(val, decimals = null) {
     }
   
     function loadHistoricalBuffer(metricId) {
-    db.ref('rooftop/history').once('value').then(snap => {
-      const dataLog = snap.val();
-      masterChartData = [];
-      
-      if (dataLog) {
-        Object.keys(dataLog).forEach(key => {
-          const entry = dataLog[key];
-          let val = null;
-          let isError = false;
+      db.ref('rooftop/history').once('value').then(snap => {
+        const dataLog = snap.val();
+        masterChartData = [];
+        
+        if (dataLog) {
+          Object.keys(dataLog).forEach(key => {
+            const entry = dataLog[key];
+            let val = null;
+            let isError = false;
 
-          if (metricId === 'tds') val = entry.tds_diff;
-          else if (metricId === 'light') val = entry.rl;
-          else if (metricId === 'rain') {
-            let rawRain = entry.rain !== undefined ? entry.rain : 1023;
-            val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
-          } else {
-            val = entry[metricId];
-          }
-
-          if (val === undefined || val === null) {
-            isError = true;
-          } else if (typeof val === 'number') {
-            if (val === -121 || val <= -100) isError = true;
-
-            // 🛑 Added (val === 0) specifically to temperatures to reject your old historical errors
-            if (['tw', 'to', 'rmt'].includes(metricId) && (val === 0 || val < -15 || val > 80)) isError = true;
-            if (metricId === 'rmh' && (val === 0 || val < 0 || val > 100)) isError = true;
-            if (['vol', 'ol', 'sol_kwh', 'tank', 'flow', 'tds', 'rain'].includes(metricId) && val < 0) isError = true;
-          }
-
-          if (entry.ts) {
-            let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
-            // Store as raw data points {x, y} for the new Time Scale
-            masterChartData.push({ x: entry.ts * 1000, y: cleanVal });
-          }
-        });
-      }
-
-      masterChartData.sort((a, b) => a.x - b.x);
-      filterChartRange(24);
-    }).catch(err => console.error("Firebase read error: ", err));
-  }
-
-  function filterChartRange(hours) {
-    const now = Date.now();
-    const cutoff = now - (hours * 3600000);
-    
-    // Filter points that belong in the selected time window
-    const filteredData = masterChartData.filter(d => d.x >= cutoff);
-    
-    const ctx = document.getElementById('histChart').getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-    
-    chartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        datasets: [{
-          label: currentMetric.toUpperCase() + ` Timeline`,
-          data: filteredData, // Pass the {x, y} coordinates directly
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37, 99, 235, 0.05)',
-          borderWidth: 2, 
-          fill: true, 
-          tension: 0.2,
-          pointRadius: 0,
-          pointHitRadius: 20,
-          spanGaps: false
-        }]
-      },
-      options: { 
-        responsive: true, 
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false,
-        },
-        scales: {
-          x: {
-            type: 'time', // 🕒 Enables mathematical timeline
-            time: {
-              unit: hours <= 24 ? 'hour' : 'day',
-              displayFormats: {
-                hour: 'HH:mm',
-                day: 'dd/MM'
-              }
-            },
-            min: cutoff, // 🛑 Hard-locks the left edge of the chart to exactly X hours ago
-            max: now,    // 🛑 Hard-locks the right edge to current time
-            ticks: {
-              autoSkip: true,
-              maxTicksLimit: 12
+            if (metricId === 'tds') val = entry.tds_diff;
+            else if (metricId === 'light') val = entry.rl;
+            else if (metricId === 'rain') {
+              let rawRain = entry.rain !== undefined ? entry.rain : 1023;
+              val = Math.max(0, Math.min(100, ((1023 - rawRain) / 1023) * 100));
+            } else {
+              val = entry[metricId];
             }
-          }
+
+            if (val === undefined || val === null) {
+              isError = true;
+            } else if (typeof val === 'number') {
+              if (val === -121 || val <= -100) isError = true;
+              if (['tw', 'to', 'rmt'].includes(metricId) && (val === 0 || val < -15 || val > 80)) isError = true;
+              if (metricId === 'rmh' && (val === 0 || val < 0 || val > 100)) isError = true;
+              if (['vol', 'ol', 'sol_kwh', 'tank', 'flow', 'tds', 'rain'].includes(metricId) && val < 0) isError = true;
+            }
+
+            if (entry.ts) {
+              let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
+              masterChartData.push({ x: entry.ts * 1000, y: cleanVal });
+            }
+          });
+        }
+
+        masterChartData.sort((a, b) => a.x - b.x);
+        filterChartRange(24);
+      }).catch(err => console.error("Firebase read error: ", err));
+    }
+
+    function filterChartRange(hours) {
+      const now = Date.now();
+      const cutoff = now - (hours * 3600000);
+      const filteredData = masterChartData.filter(d => d.x >= cutoff);
+      
+      const ctx = document.getElementById('histChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: currentMetric.toUpperCase() + ` Timeline`,
+            data: filteredData,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+            borderWidth: 2, 
+            fill: true, 
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 20,
+            spanGaps: false
+          }]
         },
-        plugins: {
-          legend: { display: true },
-          tooltip: { 
-            enabled: true,
-            callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
-                if (label) label += ': ';
-                if (context.parsed.y !== null && context.parsed.y !== undefined) {
-                  label += context.parsed.y.toFixed(1);
-                } else {
-                  label += 'No Data / Error';
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: hours <= 24 ? 'hour' : 'day',
+                displayFormats: { hour: 'HH:mm', day: 'dd/MM' }
+              },
+              min: cutoff,
+              max: now,
+              ticks: { autoSkip: true, maxTicksLimit: 12 }
+            }
+          },
+          plugins: {
+            legend: { display: true },
+            tooltip: { 
+              enabled: true,
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) label += ': ';
+                  if (context.parsed.y !== null && context.parsed.y !== undefined) {
+                    label += context.parsed.y.toFixed(1);
+                  } else {
+                    label += 'No Data / Error';
+                  }
+                  return label;
                 }
-                return label;
               }
             }
           }
         }
-      }
-    });
-    
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    const activeTab = document.getElementById(`tab-${hours}`);
-    if (activeTab) activeTab.classList.add('active');
-  }
+      });
+      
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      const activeTab = document.getElementById(`tab-${hours}`);
+      if (activeTab) activeTab.classList.add('active');
+    }
   
     function saveAlert() {
       if(currentMetric === 'vol' || currentMetric === 'ol' || currentMetric === 'sol_kwh') return;
