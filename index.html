@@ -234,6 +234,11 @@
                         </div>`;
       } else if (metricId === 'flow') {
         ui.innerHTML = `
+          <label style="color:#f59e0b; font-weight:bold;">⚙️ Sensor Calibration (K-Factor):</label><br>
+          <div class="alert-row" style="margin-top:5px; margin-bottom:15px;">
+            <input type="number" step="0.1" id="a-calib" placeholder="e.g., 11.0">
+          </div>
+        
           <label style="color:#2563eb; font-weight:bold;">1. Faucet Flow Threshold (Turn ON):</label><br>
           <div class="alert-row" style="margin-top:5px; margin-bottom:15px;">
             <input type="number" step="0.1" id="a-val" placeholder="e.g., 1.5"> <span class="unit">L/min</span>
@@ -264,12 +269,16 @@
             const elCond = document.getElementById('a-cond');
             const elLowVal = document.getElementById('a-low-val');
             const elDelay = document.getElementById('a-delay');
+            const elCalib = document.getElementById('a-calib'); // 🎯 Fetch Calibration UI
             
             if(elActive) elActive.checked = s.val().active;
             if(elVal) elVal.value = s.val().val;
             if(elCond) elCond.value = s.val().cond;
             if(elLowVal) elLowVal.value = s.val().low_val;
             if(elDelay) elDelay.value = s.val().delay;
+            
+            // 🎯 Load calibration from DB or default to 11.0
+            if(elCalib) elCalib.value = s.val().calib !== undefined ? s.val().calib : 11.0; 
           }
         });
       }
@@ -307,7 +316,7 @@
             }
 
             if (entry.ts) {
-              let cleanVal = isError ? null : parseFloat(Number(val).toFixed(2));
+              let cleanVal = isError ? null : parseFloat(Number(val).toFixed(1));
               masterChartData.push({ x: entry.ts * 1000, y: cleanVal });
             }
           });
@@ -401,6 +410,10 @@
       
       const elDelay = document.getElementById('a-delay');
       if(elDelay) rule.delay = parseInt(elDelay.value);
+
+      // 🎯 Save Calibration Factor
+      const elCalib = document.getElementById('a-calib');
+      if(elCalib) rule.calib = parseFloat(elCalib.value);
       
       db.ref('rooftop/alerts/' + currentMetric).set(rule);
       alert("Automation settings saved successfully to the Cloud.");
